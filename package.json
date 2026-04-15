@@ -1,0 +1,69 @@
+{
+  "name": "modesta",
+  "version": "0.0.1",
+  "description": "Lightweight swagger proxy generator",
+  "keywords": [
+    "swagger",
+    "proxy-generator",
+    "typescript",
+    "type-safe",
+    "json",
+    "yaml",
+    "vite"
+  ],
+  "author": "Kouji Matsui (@kekyo@mi.kekyo.net)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kekyo/modesta"
+  },
+  "homepage": "https://github.com/kekyo/modesta#readme",
+  "readme": "README_pack.md",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/src/index.d.ts",
+  "bin": {
+    "modesta": "./dist/cli.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./vite": {
+      "types": "./dist/src/vite.d.ts",
+      "import": "./dist/vite.mjs",
+      "require": "./dist/vite.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "images/modesta-120.png"
+  ],
+  "private": false,
+  "scripts": {
+    "build": "vite build",
+    "dev": "npm run build",
+    "repl": "npm run build",
+    "test": "npm run build && vitest run",
+    "pack": "npm run build && screw-up pack --pack-destination ./artifacts/"
+  },
+  "dependencies": {
+    "yaml": ">=2.8.0"
+  },
+  "peerDependencies": {
+    "vite": ">=5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": ">=25.5.0",
+    "prettier-max": ">=1.14.0",
+    "screw-up": ">=1.32.0",
+    "typescript": ">=6.0.0",
+    "unplugin-dts": ">=1.0.0-beta.6",
+    "vite": ">=5.0.0",
+    "vitest": ">=4.0.0"
+  }
+}

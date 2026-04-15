@@ -14,8 +14,6 @@
 
 ## これは何？
 
-TODO: WIP
-
 modesta は、Swagger/OpenAPI ドキュメントから TypeScript のプロキシコードを生成する、非常にシンプルなジェネレータです。
 
 生成されるコードは、型付きの送受信が可能なラッパーに相当し、余計なインフラ参照は一切存在しません。
@@ -193,7 +191,7 @@ Viteプラグインを使用すれば、Viteのビルドライフサイクルに
 
 ```typescript
 import { defineConfig } from 'vite';
-import { modesta } from 'modesta/vite';
+import modesta from 'modesta/vite';
 
 export default defineConfig({
   plugins: [

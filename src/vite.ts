@@ -23,7 +23,7 @@ import {
  * @param options Plugin options.
  * @returns Vite plugin instance.
  */
-export const modesta = (options: ModestaPluginOptions): Plugin => {
+const modesta = (options: ModestaPluginOptions): Plugin => {
   let logger = createConsoleLogger('modesta');
   let resolvedOptions: ResolvedModestaPluginOptions | undefined;
   let isSyncing = false;
@@ -119,4 +119,5 @@ export const modesta = (options: ModestaPluginOptions): Plugin => {
   return attachModestaPluginOptions(plugin, options);
 };
 
+export default modesta;
 export type { ModestaPluginOptions } from './sync';

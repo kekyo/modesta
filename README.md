@@ -197,7 +197,7 @@ A particular advantage is that HMR is automatically applied when generated files
 
 ```typescript
 import { defineConfig } from 'vite';
-import { modesta } from 'modesta/vite';
+import modesta from 'modesta/vite';
 
 export default defineConfig({
   plugins: [

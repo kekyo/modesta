@@ -10,7 +10,7 @@ import { join, resolve } from 'path';
 import { pathToFileURL } from 'url';
 import { describe, expect, it, vi } from 'vitest';
 import type { Logger as ViteLogger } from 'vite';
-import { modesta } from '../src/vite';
+import modesta from '../src/vite';
 import { runCommandAllowFailure, saveArtifactText } from './support/harness';
 
 const createSwaggerDocument = (title: string) => {
@@ -98,6 +98,15 @@ const writeSyncConfig = async (rootDirectory: string, body: string) => {
 };
 
 describe('Vite plugin and sync CLI', () => {
+  it('publishes the Vite plugin as a default export without a named modesta export', async () => {
+    const vitePluginModule = await import(
+      pathToFileURL(resolve(process.cwd(), 'dist/vite.mjs')).href
+    );
+
+    expect(typeof vitePluginModule.default).toBe('function');
+    expect('modesta' in vitePluginModule).toBe(false);
+  });
+
   it('updates generated output for local Swagger input changes and ignores output self-triggers', async () => {
     const workingDirectory = await mkdtemp(
       join(tmpdir(), 'modesta-vite-local-')
@@ -250,7 +259,7 @@ describe('Vite plugin and sync CLI', () => {
       await writeSyncConfig(
         workingDirectory,
         [
-          'import { modesta } from "__MODESTA_VITE_URL__";',
+          'import modesta from "__MODESTA_VITE_URL__";',
           '',
           'export default {',
           '  plugins: [',
@@ -329,7 +338,7 @@ describe('Vite plugin and sync CLI', () => {
       await writeSyncConfig(
         workingDirectory,
         [
-          'import { modesta } from "__MODESTA_VITE_URL__";',
+          'import modesta from "__MODESTA_VITE_URL__";',
           '',
           'export default {',
           '  plugins: [',
@@ -402,7 +411,7 @@ describe('Vite plugin and sync CLI', () => {
       await writeSyncConfig(
         workingDirectory,
         [
-          'import { modesta } from "__MODESTA_VITE_URL__";',
+          'import modesta from "__MODESTA_VITE_URL__";',
           '',
           'export default {',
           '  plugins: [',

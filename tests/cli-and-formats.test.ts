@@ -112,13 +112,23 @@ describe('CLI and format support', () => {
     expect(generatedSource).toContain('export interface LookupSummaries {');
     expect(generatedSource).toContain('export interface ListSummaries {');
     expect(generatedSource).toContain(
-      'export const create_LookupSummaries_accessor = (sender: AccessorSender): LookupSummaries => ({'
+      [
+        'export const create_LookupSummaries_accessor = <TContext>(',
+        '  sender: AccessorSender<TContext>,',
+        '  ...[context]: AccessorContextArgument<TContext>',
+        '): LookupSummaries => ({',
+      ].join('\n')
     );
     expect(generatedSource).toContain(
-      'export const create_ListSummaries_accessor = (sender: AccessorSender): ListSummaries => ({'
+      [
+        'export const create_ListSummaries_accessor = <TContext>(',
+        '  sender: AccessorSender<TContext>,',
+        '  ...[context]: AccessorContextArgument<TContext>',
+        '): ListSummaries => ({',
+      ].join('\n')
     );
     expect(generatedSource).toContain(
-      'export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSender => {'
+      'export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSender<undefined> => {'
     );
   });
 
@@ -171,7 +181,12 @@ describe('CLI and format support', () => {
     expect(stdout).toContain('export interface LookupSummaries {');
     expect(stdout).toContain('export interface ListSummaries {');
     expect(stdout).toContain(
-      'export const create_LookupSummaries_accessor = (sender: AccessorSender): LookupSummaries => ({'
+      [
+        'export const create_LookupSummaries_accessor = <TContext>(',
+        '  sender: AccessorSender<TContext>,',
+        '  ...[context]: AccessorContextArgument<TContext>',
+        '): LookupSummaries => ({',
+      ].join('\n')
     );
     expect(stdout).not.toContain('// Source file:');
   });

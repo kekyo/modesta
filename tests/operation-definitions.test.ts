@@ -161,6 +161,26 @@ describe('operation definition generation', () => {
     );
   });
 
+  it('uses a helper type for bound accessor context', () => {
+    expect(
+      getTypeAliasStatement(generatedSource, 'AccessorContextArgument')
+    ).toBe(
+      [
+        'export type AccessorContextArgument<TContext> = [TContext] extends [undefined]',
+        '    ? [context?: TContext]',
+        '    : [context: TContext];',
+      ].join('\n')
+    );
+    expect(generatedSource).toContain(
+      [
+        'export const create_GetRouteValue_accessor = <TContext>(',
+        '  sender: AccessorSender<TContext>,',
+        '  ...[context]: AccessorContextArgument<TContext>',
+        '): GetRouteValue => ({',
+      ].join('\n')
+    );
+  });
+
   it('builds sender descriptors for route parameters', async () => {
     const sender = vi.fn(async (request: unknown) => request);
     const accessor = generatedModule.create_GetRouteValue_accessor(sender);
@@ -183,6 +203,7 @@ describe('operation definition generation', () => {
         },
         body: undefined,
       },
+      undefined,
       signal
     );
   });
@@ -207,15 +228,19 @@ describe('operation definition generation', () => {
         },
         body: undefined,
       },
+      undefined,
       undefined
     );
   });
 
   it('builds sender descriptors for operations without arguments', async () => {
-    const sender = vi.fn(async (request: unknown, signal: unknown) => ({
-      request,
-      signal,
-    }));
+    const sender = vi.fn(
+      async (request: unknown, context: unknown, signal: unknown) => ({
+        request,
+        context,
+        signal,
+      })
+    );
     const accessor = generatedModule.create_ListItems_accessor(sender);
     const signal = new AbortController().signal;
 
@@ -231,6 +256,7 @@ describe('operation definition generation', () => {
         },
         body: undefined,
       },
+      undefined,
       signal
     );
   });
@@ -256,6 +282,7 @@ describe('operation definition generation', () => {
         },
         body: undefined,
       },
+      undefined,
       undefined
     );
   });
@@ -282,6 +309,34 @@ describe('operation definition generation', () => {
         body: {
           name: 'alpha',
         },
+      },
+      undefined,
+      undefined
+    );
+  });
+
+  it('passes bound context values to sender calls', async () => {
+    const sender = vi.fn(
+      async (_request: unknown, context: unknown) => context
+    );
+    const accessor = generatedModule.create_DeleteItem_accessor(sender, {
+      traceId: 'trace-42',
+    });
+
+    await accessor._delete({
+      id: '42',
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'DeleteItem._delete',
+        method: 'DELETE',
+        url: '/items/42',
+        headers: {},
+        body: undefined,
+      },
+      {
+        traceId: 'trace-42',
       },
       undefined
     );

@@ -14,8 +14,6 @@
 
 ## これは何？
 
-TODO: WIP
-
 modesta は、Swagger/OpenAPI ドキュメントから TypeScript のプロキシコードを生成する、非常にシンプルなジェネレータです。
 
 生成されるコードは、型付きの送受信が可能なラッパーに相当し、余計なインフラ参照は一切存在しません。
@@ -193,19 +191,19 @@ Viteプラグインを使用すれば、Viteのビルドライフサイクルに
 
 ```typescript
 import { defineConfig } from 'vite';
-import { modesta } from 'modesta/vite';
+import modesta from 'modesta/vite';
 
 export default defineConfig({
   plugins: [
     // modesta Viteプラグインを追加
     modesta({
-      inputPath: './swagger.json',
+      source: './swagger.json',
     }),
   ],
 });
 ```
 
-- `inputPath` は必須で、ローカルファイルパスまたは `http/https` URL を指定できます
+- `source` は必須で、ローカルファイルパス、`file:` URL、または `http/https` URL を指定できます
 - `outputPath` は省略時に `src/generated/modesta_proxy.ts` を使用します
 - 入力ファイルがローカルファイルシステム上に配置されている場合は、Viteプラグイン起動時にプロキシファイルが生成され、その後の変更も監視して更新します
 - 入力ファイルがURLの場合はプラグインでは自動更新せず、`npx modesta --sync` を使って明示的に同期します。
@@ -230,7 +228,7 @@ import { generateAccessorSource } from 'modesta';
 // Swaggerファイルを入力してプロキシコードを生成
 const source = generateAccessorSource({
   document: openApiText,
-  sourcePath: 'swagger.yaml',
+  source: 'swagger.yaml',
 });
 ```
 

@@ -68,7 +68,7 @@ export interface OperationDefinition {
 export interface ApiDefinition {
   accessorGroups: AccessorGroupDefinition[];
   schemaDefinitions: SchemaDefinition[];
-  sourcePath: string | undefined;
+  source: string | undefined;
   title: string | undefined;
 }
 

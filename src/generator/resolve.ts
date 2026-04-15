@@ -29,19 +29,15 @@ import {
 
 //////////////////////////////////////////////////////////////////////////
 
-const httpUrlPattern = /^https?:\/\//iu;
-
-const getSourceLocationForFormatDetection = (
-  sourcePath: string | undefined
-) => {
-  if (sourcePath == null || httpUrlPattern.test(sourcePath) === false) {
-    return sourcePath ?? '';
+const getSourceLocationForFormatDetection = (source: string | undefined) => {
+  if (source == null) {
+    return '';
   }
 
   try {
-    return new URL(sourcePath).pathname;
+    return new URL(source).pathname;
   } catch {
-    return sourcePath;
+    return source;
   }
 };
 
@@ -291,10 +287,10 @@ export const resolveSchemaDescription = (
 
 export const parseOpenApiDocument = (
   text: string,
-  sourcePath: string | undefined
+  source: string | undefined
 ) => {
   const extension = extname(
-    getSourceLocationForFormatDetection(sourcePath)
+    getSourceLocationForFormatDetection(source)
   ).toLowerCase();
   let parsed: unknown;
   if (extension === '.yaml' || extension === '.yml') {

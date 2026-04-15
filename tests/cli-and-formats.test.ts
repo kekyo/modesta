@@ -7,9 +7,14 @@ import { createServer } from 'http';
 import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
+import { pathToFileURL } from 'url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import YAML from 'yaml';
-import { generateAccessorSource } from '../src/generator';
+import {
+  generateAccessorSource,
+  generateAccessorSourceFromFile,
+  loadOpenApiDocumentFromFile,
+} from '../src/generator';
 import {
   fetchSwaggerJsonFromProject,
   runCommand,
@@ -246,6 +251,48 @@ describe('CLI and format support', () => {
       expect(fromJson).toContain('recordedAt: string;');
       expect(fromJson).toContain('note?: string | null;');
     });
+  });
+
+  it('accepts URL objects in generator public APIs', async () => {
+    const swaggerYaml = YAML.stringify(JSON.parse(swaggerJson));
+    const workingDirectory = await mkdtemp(
+      join(tmpdir(), 'modesta-generator-url-object-')
+    );
+    try {
+      const swaggerPath = join(workingDirectory, 'swagger.yaml');
+      const sourceUrl = pathToFileURL(swaggerPath);
+      await writeFile(swaggerPath, swaggerYaml, 'utf8');
+
+      const loadedDocument = await loadOpenApiDocumentFromFile({
+        source: sourceUrl,
+      });
+      const generatedFromFile = await generateAccessorSourceFromFile({
+        source: sourceUrl,
+      });
+      const generatedFromDocument = generateAccessorSource({
+        document: swaggerJson,
+        source: new URL('https://example.invalid/swagger/v1/swagger.yaml'),
+      });
+
+      await saveArtifactText(
+        'cli-and-formats',
+        'generated/from-generator-file-url.ts',
+        generatedFromFile
+      );
+      await saveArtifactText(
+        'cli-and-formats',
+        'generated/from-generator-remote-url.ts',
+        generatedFromDocument
+      );
+
+      expect(loadedDocument.paths).toHaveProperty('/lookups');
+      expect(generatedFromFile).toContain(`// Source file: ${sourceUrl.href}`);
+      expect(generatedFromDocument).toContain(
+        '// Source file: https://example.invalid/swagger/v1/swagger.yaml'
+      );
+    } finally {
+      await rm(workingDirectory, { force: true, recursive: true });
+    }
   });
 
   it('fails explicitly for unsupported schema composition', () => {

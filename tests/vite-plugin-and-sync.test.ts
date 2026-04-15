@@ -10,7 +10,7 @@ import { join, resolve } from 'path';
 import { pathToFileURL } from 'url';
 import { describe, expect, it, vi } from 'vitest';
 import type { Logger as ViteLogger } from 'vite';
-import { modesta } from '../src/vite';
+import modesta from '../src/vite';
 import { runCommandAllowFailure, saveArtifactText } from './support/harness';
 
 const createSwaggerDocument = (title: string) => {
@@ -98,6 +98,15 @@ const writeSyncConfig = async (rootDirectory: string, body: string) => {
 };
 
 describe('Vite plugin and sync CLI', () => {
+  it('publishes the Vite plugin as a default export without a named modesta export', async () => {
+    const vitePluginModule = await import(
+      pathToFileURL(resolve(process.cwd(), 'dist/vite.mjs')).href
+    );
+
+    expect(typeof vitePluginModule.default).toBe('function');
+    expect('modesta' in vitePluginModule).toBe(false);
+  });
+
   it('updates generated output for local Swagger input changes and ignores output self-triggers', async () => {
     const workingDirectory = await mkdtemp(
       join(tmpdir(), 'modesta-vite-local-')
@@ -109,7 +118,7 @@ describe('Vite plugin and sync CLI', () => {
       await writeFile(inputPath, createSwaggerDocument('Local Alpha'), 'utf8');
 
       const plugin = modesta({
-        inputPath: './swagger.json',
+        source: pathToFileURL(inputPath),
         outputPath: './src/generated/api.ts',
       });
       const { entries, logger } = createCapturingLogger();
@@ -186,7 +195,7 @@ describe('Vite plugin and sync CLI', () => {
     );
     try {
       const plugin = modesta({
-        inputPath: 'https://example.invalid/swagger/v1/swagger.json',
+        source: new URL('https://example.invalid/swagger/v1/swagger.json'),
       });
       const { logger } = createCapturingLogger();
       const config = createPluginConfig(workingDirectory, logger);
@@ -250,11 +259,11 @@ describe('Vite plugin and sync CLI', () => {
       await writeSyncConfig(
         workingDirectory,
         [
-          'import { modesta } from "__MODESTA_VITE_URL__";',
+          'import modesta from "__MODESTA_VITE_URL__";',
           '',
           'export default {',
           '  plugins: [',
-          `    modesta({ inputPath: ${JSON.stringify(inputUrl)} }),`,
+          `    modesta({ source: new URL(${JSON.stringify(inputUrl)}) }),`,
           '  ],',
           '};',
           '',
@@ -329,12 +338,12 @@ describe('Vite plugin and sync CLI', () => {
       await writeSyncConfig(
         workingDirectory,
         [
-          'import { modesta } from "__MODESTA_VITE_URL__";',
+          'import modesta from "__MODESTA_VITE_URL__";',
           '',
           'export default {',
           '  plugins: [',
-          '    modesta({ inputPath: "./swagger-a.json" }),',
-          '    modesta({ inputPath: "./swagger-b.json" }),',
+          '    modesta({ source: "./swagger-a.json" }),',
+          '    modesta({ source: "./swagger-b.json" }),',
           '  ],',
           '};',
           '',
@@ -402,11 +411,11 @@ describe('Vite plugin and sync CLI', () => {
       await writeSyncConfig(
         workingDirectory,
         [
-          'import { modesta } from "__MODESTA_VITE_URL__";',
+          'import modesta from "__MODESTA_VITE_URL__";',
           '',
           'export default {',
           '  plugins: [',
-          `    modesta({ inputPath: ${JSON.stringify(`http://127.0.0.1:${address.port}/swagger.json`)} }),`,
+          `    modesta({ source: new URL(${JSON.stringify(`http://127.0.0.1:${address.port}/swagger.json`)}) }),`,
           '  ],',
           '};',
           '',

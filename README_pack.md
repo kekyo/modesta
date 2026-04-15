@@ -11,8 +11,6 @@ Lightweight Swagger/OpenAPI --> TypeScript proxy generator
 
 ## What Is This?
 
-TODO: WIP
-
 modesta is a very simple generator that produces TypeScript proxy code from Swagger/OpenAPI documents.
 
 The generated code is effectively a typed request/response wrapper and does not depend on any extra infrastructure.
@@ -193,19 +191,19 @@ A particular advantage is that HMR is automatically applied when generated files
 
 ```typescript
 import { defineConfig } from 'vite';
-import { modesta } from 'modesta/vite';
+import modesta from 'modesta/vite';
 
 export default defineConfig({
   plugins: [
     // Add the modesta Vite plugin
     modesta({
-      inputPath: './swagger.json',
+      source: './swagger.json',
     }),
   ],
 });
 ```
 
-- `inputPath` is required; you can specify a local file path or an `http/https` URL
+- `source` is required; you can specify a local file path, a `file:` URL, or an `http/https` URL
 - If `outputPath` is omitted, `src/generated/modesta_proxy.ts` is used
 - If the input file is located on the local file system, the proxy file is generated when the Vite plugin starts, and subsequent changes are monitored and updated
 - If the input file is a URL, the plugin does not automatically update it; instead, use `npx modesta --sync` to explicitly synchronize.
@@ -230,7 +228,7 @@ import { generateAccessorSource } from 'modesta';
 // Enter a Swagger file to generate proxy code
 const source = generateAccessorSource({
   document: openApiText,
-  sourcePath: 'swagger.yaml',
+  source: 'swagger.yaml',
 });
 ```
 

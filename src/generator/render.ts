@@ -51,8 +51,8 @@ export const renderApiDefinition = (
   if (api.title != null) {
     push(`// Source title: ${api.title}`);
   }
-  if (api.sourcePath != null) {
-    push(`// Source file: ${api.sourcePath}`);
+  if (api.source != null) {
+    push(`// Source file: ${api.source}`);
   }
   push();
 

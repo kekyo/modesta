@@ -25,6 +25,13 @@ export interface GenerateAccessorSourceFromFileOptions {
    * JSON and YAML documents are both supported.
    */
   source: OpenApiSource;
+  /**
+   * Disables TLS certificate verification when loading a remote `https` URL.
+   * This should only be enabled for local development or other controlled
+   * environments.
+   * @default false
+   */
+  insecure?: boolean | undefined;
 }
 
 /**

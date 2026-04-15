@@ -23,6 +23,7 @@ export const syncModestaOutput = async (
   logger: Logger
 ) => {
   const generatedSource = await generateAccessorSourceFromFile({
+    insecure: options.insecure,
     source: options.source,
   });
 

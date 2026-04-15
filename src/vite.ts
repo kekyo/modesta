@@ -28,6 +28,13 @@ export interface ModestaPluginOptions {
    */
   source: OpenApiSource;
   /**
+   * Disables TLS certificate verification when loading a remote `https` URL.
+   * This should only be enabled for local development or other controlled
+   * environments.
+   * @default false
+   */
+  insecure?: boolean | undefined;
+  /**
    * Destination path for the generated TypeScript file.
    * @default `src/generated/modesta_proxy.ts`
    */
@@ -54,6 +61,10 @@ export interface ResolvedModestaPluginOptions {
    * Input source kind.
    */
   inputKind: 'file' | 'url';
+  /**
+   * Whether TLS certificate verification is disabled for remote `https` URLs.
+   */
+  insecure: boolean;
 }
 
 /**
@@ -121,6 +132,7 @@ const isModestaPluginOptions = (
   return (
     isRecord(value) &&
     (typeof value.source === 'string' || value.source instanceof URL) &&
+    (value.insecure == null || typeof value.insecure === 'boolean') &&
     (value.outputPath == null || typeof value.outputPath === 'string')
   );
 };
@@ -157,6 +169,7 @@ export const resolveModestaPluginOptions = (
 
   return {
     inputKind: normalizedSource.inputKind,
+    insecure: options.insecure === true,
     outputPath: resolvedOutputPath,
     rootDirectory: normalizedRootDirectory,
     source: resolvedSource,

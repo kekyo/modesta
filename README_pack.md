@@ -174,15 +174,16 @@ If you use it as a CLI, for example:
 npx modesta
 npx modesta swagger.json
 npx modesta swagger.json src/generated/api.ts
-npx modesta https://example.invalid/swagger/v1/swagger.json src/generated/api.ts
+npx modesta https://example.com/swagger/v1/swagger.json src/generated/api.ts
 npx modesta --sync
 ```
 
-1. If the first positional argument is omitted, it reads Swagger/OpenAPI text from stdin
-2. If the first positional argument is present, it reads the specified file, or fetches it directly when it is an `http/https` URL
-3. If the second positional argument is omitted, it writes generated TypeScript source to stdout
-4. If the second positional argument is present, it writes the result to that file path
-5. If `--sync` is specified on its own, it reads and executes the Vite plugin configuration (see below)
+- If the first positional argument is omitted, it reads Swagger/OpenAPI text from stdin
+- If the first positional argument is present, it reads the specified file, or fetches it directly when it is an `http/https` URL
+  - If `--insecure` is specified, TLS certificate verification is disabled for remote `https` inputs
+- If the second positional argument is omitted, it writes generated TypeScript source to stdout
+- If the second positional argument is present, it writes the result to that file path
+- If `--sync` is specified on its own, it reads and executes the Vite plugin configuration (see below)
 
 ### Vite Plugin
 
@@ -204,6 +205,7 @@ export default defineConfig({
 ```
 
 - `source` is required; you can specify a local file path, a `file:` URL, or an `http/https` URL
+- `insecure` disables TLS certificate verification for remote `https` URLs. It defaults to `false`
 - If `outputPath` is omitted, `src/generated/modesta_proxy.ts` is used
 - If the input file is located on the local file system, the proxy file is generated when the Vite plugin starts, and subsequent changes are monitored and updated
 - If the input file is a URL, the plugin does not automatically update it; instead, use `npx modesta --sync` to explicitly synchronize.
@@ -223,12 +225,19 @@ When using this as a library, use the public APIs `loadOpenApiDocumentFromFile`,
 The following is an example of `generateAccessorSource`:
 
 ```typescript
-import { generateAccessorSource } from 'modesta';
+import {
+  generateAccessorSource,
+  generateAccessorSourceFromFile,
+} from 'modesta';
 
 // Enter a Swagger file to generate proxy code
 const source = generateAccessorSource({
   document: openApiText,
   source: 'swagger.yaml',
+});
+
+const generatedFromRemote = await generateAccessorSourceFromFile({
+  source: 'https://example.com/swagger/v1/swagger.json',
 });
 ```
 

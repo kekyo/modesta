@@ -174,15 +174,16 @@ CLIは次のように実行します:
 npx modesta
 npx modesta swagger.json
 npx modesta swagger.json src/generated/api.ts
-npx modesta https://example.invalid/swagger/v1/swagger.json src/generated/api.ts
+npx modesta https://example.com/swagger/v1/swagger.json src/generated/api.ts
 npx modesta --sync
 ```
 
-1. 先頭の引数が省略された場合は、stdin から Swagger/OpenAPI テキストを読み込む
-2. 先頭の引数が指定された場合は、そのファイルを読み込む。`http/https` URL の場合は直接取得する
-3. 2 番目の引数が省略された場合は、生成した TypeScript ソースコードを stdout に書き出す
-4. 2 番目の引数が指定された場合は、そのパスへ書き出す
-5. `--sync` を単独で指定した場合は、Viteプラグインの設定を読み取って実行する（後述）
+- 先頭の引数が省略された場合は、stdin から Swagger/OpenAPI テキストを読み込みます
+- 先頭の引数が指定された場合は、そのファイルを読み込む。`http/https` URL の場合は直接取得します
+  - `--insecure` を指定した場合は、リモート `https` 入力の TLS 証明書検証を無効化します
+- 2 番目の引数が省略された場合は、生成した TypeScript ソースコードを stdout に書き出します
+- 2 番目の引数が指定された場合は、そのパスへ書き出します
+- `--sync` を単独で指定した場合は、Viteプラグインの設定を読み取って実行します（後述）
 
 ### Viteプラグイン
 
@@ -204,6 +205,7 @@ export default defineConfig({
 ```
 
 - `source` は必須で、ローカルファイルパス、`file:` URL、または `http/https` URL を指定できます
+- `insecure` はリモート `https` URL の TLS 証明書検証を無効化します。デフォルト値は `false` です
 - `outputPath` は省略時に `src/generated/modesta_proxy.ts` を使用します
 - 入力ファイルがローカルファイルシステム上に配置されている場合は、Viteプラグイン起動時にプロキシファイルが生成され、その後の変更も監視して更新します
 - 入力ファイルがURLの場合はプラグインでは自動更新せず、`npx modesta --sync` を使って明示的に同期します。
@@ -223,12 +225,19 @@ export default defineConfig({
 以下に `generateAccessorSource` の例を示します:
 
 ```typescript
-import { generateAccessorSource } from 'modesta';
+import {
+  generateAccessorSource,
+  generateAccessorSourceFromFile,
+} from 'modesta';
 
 // Swaggerファイルを入力してプロキシコードを生成
 const source = generateAccessorSource({
   document: openApiText,
   source: 'swagger.yaml',
+});
+
+const generatedFromRemote = await generateAccessorSourceFromFile({
+  source: 'https://example.com/swagger/v1/swagger.json',
 });
 ```
 
@@ -263,7 +272,7 @@ import {
 // ベースURL・認証トークンを明示的に使用するSenderを生成
 // 接続先が同一なら、一度だけ生成して使いまわすことができる
 const sender = createFetchSender({
-  baseUrl: 'https://example.invalid',
+  baseUrl: 'https://example.com',
   headers: {
     authorization: 'Bearer token',
   },

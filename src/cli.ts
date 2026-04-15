@@ -8,16 +8,16 @@ import { mkdir, writeFile } from 'fs/promises';
 import { dirname, resolve } from 'path';
 import { parseArgs } from 'util';
 import {
+  flattenVitePluginOptions,
+  getModestaPluginOptions,
+  resolveModestaPluginOptions,
+} from './vite';
+import {
   generateAccessorSource,
   generateAccessorSourceFromFile,
 } from './generator';
 import { createConsoleLogger } from './logger';
-import {
-  flattenVitePluginOptions,
-  getModestaPluginOptions,
-  resolveModestaPluginOptions,
-  syncModestaOutput,
-} from './sync';
+import { syncModestaOutput } from './sync';
 import { git_commit_hash, version } from './generated/packageMetadata';
 
 const usage = [
@@ -132,7 +132,7 @@ const main = async () => {
   const generated =
     inputPath != null
       ? await generateAccessorSourceFromFile({
-          inputPath: httpUrlPattern.test(inputPath)
+          source: httpUrlPattern.test(inputPath)
             ? inputPath
             : resolve(process.cwd(), inputPath),
         })

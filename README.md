@@ -203,13 +203,13 @@ export default defineConfig({
   plugins: [
     // Add the modesta Vite plugin
     modesta({
-      inputPath: './swagger.json',
+      source: './swagger.json',
     }),
   ],
 });
 ```
 
-- `inputPath` is required; you can specify a local file path or an `http/https` URL
+- `source` is required; you can specify a local file path, a `file:` URL, or an `http/https` URL
 - If `outputPath` is omitted, `src/generated/modesta_proxy.ts` is used
 - If the input file is located on the local file system, the proxy file is generated when the Vite plugin starts, and subsequent changes are monitored and updated
 - If the input file is a URL, the plugin does not automatically update it; instead, use `npx modesta --sync` to explicitly synchronize.
@@ -234,7 +234,7 @@ import { generateAccessorSource } from 'modesta';
 // Enter a Swagger file to generate proxy code
 const source = generateAccessorSource({
   document: openApiText,
-  sourcePath: 'swagger.yaml',
+  source: 'swagger.yaml',
 });
 ```
 

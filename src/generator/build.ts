@@ -30,7 +30,7 @@ export const createOpenApiContext = (document: JsonRecord): OpenApiContext => {
 
 export const buildApiDefinition = (
   context: OpenApiContext,
-  sourcePath: string | undefined
+  source: string | undefined
 ): ApiDefinition => {
   const info = getRecord(context.document, 'info');
   const title = getString(info, 'title');
@@ -57,7 +57,7 @@ export const buildApiDefinition = (
   return {
     accessorGroups,
     schemaDefinitions,
-    sourcePath,
+    source,
     title,
   };
 };

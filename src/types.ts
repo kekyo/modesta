@@ -9,15 +9,22 @@
 export type JsonRecord = Record<string, unknown>;
 
 /**
+ * Source reference for an OpenAPI document.
+ * Accepts a local file path string, a `file:` URL, or an `http/https` URL.
+ */
+export type OpenApiSource = string | URL;
+
+/**
  * Options for loading an OpenAPI document from a file path or URL and generating
  * TypeScript accessor source code.
  */
 export interface GenerateAccessorSourceFromFileOptions {
   /**
-   * File path or `http/https` URL for the input Swagger/OpenAPI document.
+   * File path, `file:` URL, or `http/https` URL for the input Swagger/OpenAPI
+   * document.
    * JSON and YAML documents are both supported.
    */
-  inputPath: string;
+  source: OpenApiSource;
 }
 
 /**
@@ -35,5 +42,5 @@ export interface GenerateAccessorSourceOptions {
    * Used to improve format detection when `document` is a string and to
    * include source metadata in generated output comments.
    */
-  sourcePath?: string | undefined;
+  source?: OpenApiSource | undefined;
 }

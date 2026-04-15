@@ -283,7 +283,7 @@ export const generateAccessorSourceFromProject = async (
   );
   const generatedSource = generateAccessorSource({
     document: swaggerJson,
-    sourcePath: 'swagger.json',
+    source: 'swagger.json',
   });
   await saveArtifactText(
     options.artifactName,

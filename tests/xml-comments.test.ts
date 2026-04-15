@@ -153,7 +153,7 @@ describe('xml comments integration', () => {
     swaggerDocument = JSON.parse(swaggerJson) as Record<string, any>;
     generatedSource = generateAccessorSource({
       document: swaggerJson,
-      sourcePath: 'swagger.json',
+      source: 'swagger.json',
     });
     await saveArtifactText(
       'xml-comments',

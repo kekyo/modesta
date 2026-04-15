@@ -6,8 +6,8 @@
 import { createServer } from 'http';
 import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join, resolve } from 'path';
-import { pathToFileURL } from 'url';
+import { basename, join, resolve } from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import YAML from 'yaml';
 import type { IncomingMessage, ServerResponse } from 'http';
@@ -101,6 +101,23 @@ describe('CLI and format support', () => {
     return address;
   };
 
+  const expectedSourceFileDisplay = (source: string) => {
+    try {
+      const url = new URL(source);
+      if (url.protocol === 'file:') {
+        return basename(fileURLToPath(url));
+      }
+
+      url.hostname = 'example.com';
+      url.port = '';
+      url.username = '';
+      url.password = '';
+      return url.href;
+    } catch {
+      return basename(source);
+    }
+  };
+
   it('writes generated source through the CLI', async () => {
     const generatedSource = await runModestaCli(
       swaggerJson,
@@ -158,7 +175,9 @@ describe('CLI and format support', () => {
 
       expect(stdout).toContain('export interface LookupSummaries {');
       expect(stdout).toContain('export interface ListSummaries {');
-      expect(stdout).toContain(`// Source file: ${swaggerPath}`);
+      expect(stdout).toContain(
+        `// Source file: ${expectedSourceFileDisplay(swaggerPath)}`
+      );
     } finally {
       await rm(workingDirectory, { force: true, recursive: true });
     }
@@ -234,7 +253,9 @@ describe('CLI and format support', () => {
 
       expect(generatedSource).toContain('export interface LookupSummaries {');
       expect(generatedSource).toContain('export interface ListSummaries {');
-      expect(generatedSource).toContain(`// Source file: ${inputUrl}`);
+      expect(generatedSource).toContain(
+        `// Source file: ${expectedSourceFileDisplay(inputUrl)}`
+      );
     } finally {
       await new Promise<void>((resolveClose) =>
         server.close(() => resolveClose())
@@ -337,8 +358,12 @@ describe('CLI and format support', () => {
       );
 
       expect(loadedDocument.paths).toHaveProperty('/lookups');
-      expect(generatedFromFile).toContain(`// Source file: ${inputUrl}`);
-      expect(generatedFromCli).toContain(`// Source file: ${inputUrl}`);
+      expect(generatedFromFile).toContain(
+        `// Source file: ${expectedSourceFileDisplay(inputUrl)}`
+      );
+      expect(generatedFromCli).toContain(
+        `// Source file: ${expectedSourceFileDisplay(inputUrl)}`
+      );
     } finally {
       await new Promise<void>((resolveClose) =>
         server.close(() => resolveClose())
@@ -418,9 +443,11 @@ describe('CLI and format support', () => {
       );
 
       expect(loadedDocument.paths).toHaveProperty('/lookups');
-      expect(generatedFromFile).toContain(`// Source file: ${sourceUrl.href}`);
+      expect(generatedFromFile).toContain(
+        `// Source file: ${expectedSourceFileDisplay(sourceUrl.href)}`
+      );
       expect(generatedFromDocument).toContain(
-        '// Source file: https://example.invalid/swagger/v1/swagger.yaml'
+        `// Source file: ${expectedSourceFileDisplay('https://example.invalid/swagger/v1/swagger.yaml')}`
       );
     } finally {
       await rm(workingDirectory, { force: true, recursive: true });

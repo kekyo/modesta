@@ -6,8 +6,8 @@
 import { createServer } from 'http';
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join, resolve } from 'path';
-import { pathToFileURL } from 'url';
+import { basename, join, resolve } from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { describe, expect, it, vi } from 'vitest';
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Logger as ViteLogger } from 'vite';
@@ -118,6 +118,23 @@ const listenServer = async (
   }
 
   return address;
+};
+
+const expectedSourceFileDisplay = (source: string) => {
+  try {
+    const url = new URL(source);
+    if (url.protocol === 'file:') {
+      return basename(fileURLToPath(url));
+    }
+
+    url.hostname = 'example.com';
+    url.port = '';
+    url.username = '';
+    url.password = '';
+    return url.href;
+  } catch {
+    return basename(source);
+  }
 };
 
 describe('Vite plugin and sync CLI', () => {
@@ -301,7 +318,9 @@ describe('Vite plugin and sync CLI', () => {
 
       expect(result.exitCode).toBe(0);
       expect(generatedSource).toContain('// Source title: Synced Remote');
-      expect(generatedSource).toContain(`// Source file: ${inputUrl}`);
+      expect(generatedSource).toContain(
+        `// Source file: ${expectedSourceFileDisplay(inputUrl)}`
+      );
     } finally {
       await new Promise<void>((resolveClose) =>
         server.close(() => resolveClose())
@@ -362,7 +381,9 @@ describe('Vite plugin and sync CLI', () => {
       expect(generatedSource).toContain(
         '// Source title: Synced Self-Signed Remote'
       );
-      expect(generatedSource).toContain(`// Source file: ${inputUrl}`);
+      expect(generatedSource).toContain(
+        `// Source file: ${expectedSourceFileDisplay(inputUrl)}`
+      );
     } finally {
       await new Promise<void>((resolveClose) =>
         server.close(() => resolveClose())

@@ -6,10 +6,11 @@
 import { createServer } from 'http';
 import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join, resolve } from 'path';
-import { pathToFileURL } from 'url';
+import { basename, join, resolve } from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import YAML from 'yaml';
+import type { IncomingMessage, ServerResponse } from 'http';
 import {
   generateAccessorSource,
   generateAccessorSourceFromFile,
@@ -18,10 +19,12 @@ import {
 import {
   fetchSwaggerJsonFromProject,
   runCommand,
+  runCommandAllowFailure,
   runModestaCli,
   saveArtifactText,
   SwaggerFixtureProject,
 } from './support/harness';
+import { createSelfSignedHttpsServer } from './support/https-fixture';
 
 const formatProject: SwaggerFixtureProject = {
   files: {
@@ -77,6 +80,44 @@ describe('CLI and format support', () => {
     );
   });
 
+  const listenServer = async (
+    server:
+      | ReturnType<typeof createSelfSignedHttpsServer>
+      | ReturnType<typeof createServer>
+  ) => {
+    await new Promise<void>((resolveListen, rejectListen) => {
+      server.once('error', rejectListen);
+      server.listen(0, '127.0.0.1', () => resolveListen());
+    });
+
+    const address = server.address();
+    if (address == null || typeof address === 'string') {
+      await new Promise<void>((resolveClose) =>
+        server.close(() => resolveClose())
+      );
+      throw new Error('Could not determine HTTP server address.');
+    }
+
+    return address;
+  };
+
+  const expectedSourceFileDisplay = (source: string) => {
+    try {
+      const url = new URL(source);
+      if (url.protocol === 'file:') {
+        return basename(fileURLToPath(url));
+      }
+
+      url.hostname = 'example.com';
+      url.port = '';
+      url.username = '';
+      url.password = '';
+      return url.href;
+    } catch {
+      return basename(source);
+    }
+  };
+
   it('writes generated source through the CLI', async () => {
     const generatedSource = await runModestaCli(
       swaggerJson,
@@ -88,13 +129,23 @@ describe('CLI and format support', () => {
     expect(generatedSource).toContain('export interface LookupSummaries {');
     expect(generatedSource).toContain('export interface ListSummaries {');
     expect(generatedSource).toContain(
-      'export const create_LookupSummaries_accessor = (sender: AccessorSender): LookupSummaries => ({'
+      [
+        'export const create_LookupSummaries_accessor = <TContext>(',
+        '  sender: AccessorSender<TContext>,',
+        '  ...[context]: AccessorContextArgument<TContext>',
+        '): LookupSummaries => ({',
+      ].join('\n')
     );
     expect(generatedSource).toContain(
-      'export const create_ListSummaries_accessor = (sender: AccessorSender): ListSummaries => ({'
+      [
+        'export const create_ListSummaries_accessor = <TContext>(',
+        '  sender: AccessorSender<TContext>,',
+        '  ...[context]: AccessorContextArgument<TContext>',
+        '): ListSummaries => ({',
+      ].join('\n')
     );
     expect(generatedSource).toContain(
-      'export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSender => {'
+      'export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSender<undefined> => {'
     );
   });
 
@@ -124,7 +175,9 @@ describe('CLI and format support', () => {
 
       expect(stdout).toContain('export interface LookupSummaries {');
       expect(stdout).toContain('export interface ListSummaries {');
-      expect(stdout).toContain(`// Source file: ${swaggerPath}`);
+      expect(stdout).toContain(
+        `// Source file: ${expectedSourceFileDisplay(swaggerPath)}`
+      );
     } finally {
       await rm(workingDirectory, { force: true, recursive: true });
     }
@@ -147,7 +200,12 @@ describe('CLI and format support', () => {
     expect(stdout).toContain('export interface LookupSummaries {');
     expect(stdout).toContain('export interface ListSummaries {');
     expect(stdout).toContain(
-      'export const create_LookupSummaries_accessor = (sender: AccessorSender): LookupSummaries => ({'
+      [
+        'export const create_LookupSummaries_accessor = <TContext>(',
+        '  sender: AccessorSender<TContext>,',
+        '  ...[context]: AccessorContextArgument<TContext>',
+        '): LookupSummaries => ({',
+      ].join('\n')
     );
     expect(stdout).not.toContain('// Source file:');
   });
@@ -169,18 +227,7 @@ describe('CLI and format support', () => {
       response.end(swaggerYaml);
     });
 
-    await new Promise<void>((resolveListen, rejectListen) => {
-      server.once('error', rejectListen);
-      server.listen(0, '127.0.0.1', () => resolveListen());
-    });
-
-    const address = server.address();
-    if (address == null || typeof address === 'string') {
-      await new Promise<void>((resolveClose) =>
-        server.close(() => resolveClose())
-      );
-      throw new Error('Could not determine HTTP server address.');
-    }
+    const address = await listenServer(server);
 
     const inputUrl = `http://127.0.0.1:${address.port}/swagger/v1/swagger.yaml?download=1`;
 
@@ -206,7 +253,117 @@ describe('CLI and format support', () => {
 
       expect(generatedSource).toContain('export interface LookupSummaries {');
       expect(generatedSource).toContain('export interface ListSummaries {');
-      expect(generatedSource).toContain(`// Source file: ${inputUrl}`);
+      expect(generatedSource).toContain(
+        `// Source file: ${expectedSourceFileDisplay(inputUrl)}`
+      );
+    } finally {
+      await new Promise<void>((resolveClose) =>
+        server.close(() => resolveClose())
+      );
+      await rm(workingDirectory, { force: true, recursive: true });
+    }
+  });
+
+  it('fails to fetch Swagger from a self-signed HTTPS URL through the CLI by default', async () => {
+    const swaggerYaml = YAML.stringify(JSON.parse(swaggerJson));
+    const workingDirectory = await mkdtemp(
+      join(tmpdir(), 'modesta-cli-https-fail-')
+    );
+    const outputPath = join(workingDirectory, 'generated.ts');
+    const server = createSelfSignedHttpsServer(
+      (request: IncomingMessage, response: ServerResponse<IncomingMessage>) => {
+        if (request.url?.startsWith('/swagger/v1/swagger.yaml') !== true) {
+          response.statusCode = 404;
+          response.end();
+          return;
+        }
+
+        response.writeHead(200, {
+          'content-type': 'application/yaml; charset=utf-8',
+        });
+        response.end(swaggerYaml);
+      }
+    );
+
+    const address = await listenServer(server);
+    const inputUrl = `https://127.0.0.1:${address.port}/swagger/v1/swagger.yaml?download=1`;
+
+    try {
+      const result = await runCommandAllowFailure(
+        'node',
+        [resolve(process.cwd(), 'dist/cli.mjs'), inputUrl, outputPath],
+        process.cwd()
+      );
+
+      expect(result.exitCode).toBe(1);
+      await expect(readFile(outputPath, 'utf8')).rejects.toThrow();
+    } finally {
+      await new Promise<void>((resolveClose) =>
+        server.close(() => resolveClose())
+      );
+      await rm(workingDirectory, { force: true, recursive: true });
+    }
+  });
+
+  it('accepts insecure mode for self-signed HTTPS URLs in the CLI and library file-loading APIs', async () => {
+    const swaggerYaml = YAML.stringify(JSON.parse(swaggerJson));
+    const workingDirectory = await mkdtemp(
+      join(tmpdir(), 'modesta-cli-https-insecure-')
+    );
+    const outputPath = join(workingDirectory, 'generated.ts');
+    const server = createSelfSignedHttpsServer(
+      (request: IncomingMessage, response: ServerResponse<IncomingMessage>) => {
+        if (request.url?.startsWith('/swagger/v1/swagger.yaml') !== true) {
+          response.statusCode = 404;
+          response.end();
+          return;
+        }
+
+        response.writeHead(200, {
+          'content-type': 'application/yaml; charset=utf-8',
+        });
+        response.end(swaggerYaml);
+      }
+    );
+
+    const address = await listenServer(server);
+    const inputUrl = `https://127.0.0.1:${address.port}/swagger/v1/swagger.yaml?download=1`;
+
+    try {
+      const loadedDocument = await loadOpenApiDocumentFromFile({
+        insecure: true,
+        source: new URL(inputUrl),
+      });
+      const generatedFromFile = await generateAccessorSourceFromFile({
+        insecure: true,
+        source: inputUrl,
+      });
+
+      await runCommand(
+        'node',
+        [
+          resolve(process.cwd(), 'dist/cli.mjs'),
+          '--insecure',
+          inputUrl,
+          outputPath,
+        ],
+        process.cwd()
+      );
+
+      const generatedFromCli = await readFile(outputPath, 'utf8');
+      await saveArtifactText(
+        'cli-and-formats',
+        'generated/from-cli-self-signed-url.ts',
+        generatedFromCli
+      );
+
+      expect(loadedDocument.paths).toHaveProperty('/lookups');
+      expect(generatedFromFile).toContain(
+        `// Source file: ${expectedSourceFileDisplay(inputUrl)}`
+      );
+      expect(generatedFromCli).toContain(
+        `// Source file: ${expectedSourceFileDisplay(inputUrl)}`
+      );
     } finally {
       await new Promise<void>((resolveClose) =>
         server.close(() => resolveClose())
@@ -286,9 +443,11 @@ describe('CLI and format support', () => {
       );
 
       expect(loadedDocument.paths).toHaveProperty('/lookups');
-      expect(generatedFromFile).toContain(`// Source file: ${sourceUrl.href}`);
+      expect(generatedFromFile).toContain(
+        `// Source file: ${expectedSourceFileDisplay(sourceUrl.href)}`
+      );
       expect(generatedFromDocument).toContain(
-        '// Source file: https://example.invalid/swagger/v1/swagger.yaml'
+        `// Source file: ${expectedSourceFileDisplay('https://example.invalid/swagger/v1/swagger.yaml')}`
       );
     } finally {
       await rm(workingDirectory, { force: true, recursive: true });

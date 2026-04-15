@@ -27,9 +27,10 @@ const usage = [
   'https://github.com/kekyo/modesta',
   '',
   'Usage: modesta [--sync]',
-  '       modesta [<swagger.json|swagger.yaml|https://...>] [<generated.ts>]',
+  '       modesta [--insecure] [<swagger.json|swagger.yaml|https://...>] [<generated.ts>]',
   '',
   'Options:',
+  '  --insecure    Disable TLS certificate verification for remote https inputs.',
   '  --sync    Read modesta() options from vite.config.* and synchronize once.',
   '  --help    Show this help.',
   '',
@@ -101,6 +102,9 @@ const main = async () => {
       help: {
         type: 'boolean',
       },
+      insecure: {
+        type: 'boolean',
+      },
       sync: {
         type: 'boolean',
       },
@@ -113,8 +117,10 @@ const main = async () => {
     return;
   }
 
+  const insecure = parsed.values.insecure === true;
+
   if (parsed.values.sync) {
-    if (parsed.values.help || parsed.positionals.length > 0) {
+    if (parsed.values.help || insecure || parsed.positionals.length > 0) {
       throw new Error(
         `--sync does not accept any additional options or positional arguments.\n\n${usage}`
       );
@@ -132,6 +138,7 @@ const main = async () => {
   const generated =
     inputPath != null
       ? await generateAccessorSourceFromFile({
+          insecure,
           source: httpUrlPattern.test(inputPath)
             ? inputPath
             : resolve(process.cwd(), inputPath),

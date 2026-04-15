@@ -52,6 +52,22 @@ const findInterfaceDeclaration = (source: string, interfaceName: string) => {
   };
 };
 
+const findTypeAliasDeclaration = (source: string, typeName: string) => {
+  const pattern = new RegExp(
+    `export type ${escapeRegExp(typeName)}(?:<[^\\n]+?>)? = `,
+    'u'
+  );
+  const match = pattern.exec(source);
+  if (match == null || match.index == null) {
+    throw new Error(`Could not find type alias '${typeName}'.`);
+  }
+
+  return {
+    declaration: match[0],
+    startIndex: match.index,
+  };
+};
+
 const extractBalancedBlock = (source: string, startIndex: number) => {
   let depth = 0;
   for (let index = startIndex; index < source.length; index += 1) {
@@ -88,11 +104,10 @@ export const getInterfaceBlock = (source: string, interfaceName: string) => {
 };
 
 export const getTypeAliasStatement = (source: string, typeName: string) => {
-  const marker = `export type ${typeName} = `;
-  const startIndex = source.indexOf(marker);
-  if (startIndex < 0) {
-    throw new Error(`Could not find type alias '${typeName}'.`);
-  }
+  const { declaration, startIndex } = findTypeAliasDeclaration(
+    source,
+    typeName
+  );
 
   let angleDepth = 0;
   let braceDepth = 0;
@@ -100,7 +115,7 @@ export const getTypeAliasStatement = (source: string, typeName: string) => {
   let parenDepth = 0;
 
   for (
-    let index = startIndex + marker.length;
+    let index = startIndex + declaration.length;
     index < source.length;
     index += 1
   ) {
@@ -164,13 +179,9 @@ export const getInterfaceDocumentation = (
 };
 
 export const getTypeAliasDocumentation = (source: string, typeName: string) => {
-  const marker = `export type ${typeName} = `;
-  const typeIndex = source.indexOf(marker);
-  if (typeIndex < 0) {
-    throw new Error(`Could not find type alias '${typeName}'.`);
-  }
+  const { startIndex } = findTypeAliasDeclaration(source, typeName);
 
-  return findDocumentationBeforeIndex(source, typeIndex, `type '${typeName}'`);
+  return findDocumentationBeforeIndex(source, startIndex, `type '${typeName}'`);
 };
 
 export const getConstDocumentation = (source: string, constName: string) => {

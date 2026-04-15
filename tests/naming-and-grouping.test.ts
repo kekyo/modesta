@@ -176,13 +176,28 @@ describe('naming and grouping rules', () => {
     );
 
     expect(pathGroupingSource).toContain(
-      'export const create_xml_comments_accessor = (sender: AccessorSender): xml_comments => ({'
+      [
+        'export const create_xml_comments_accessor = <TContext>(',
+        '  sender: AccessorSender<TContext>,',
+        '  ...[context]: AccessorContextArgument<TContext>',
+        '): xml_comments => ({',
+      ].join('\n')
     );
     expect(pathGroupingSource).toContain(
-      'export const create_another_accessor = (sender: AccessorSender): another => ({'
+      [
+        'export const create_another_accessor = <TContext>(',
+        '  sender: AccessorSender<TContext>,',
+        '  ...[context]: AccessorContextArgument<TContext>',
+        '): another => ({',
+      ].join('\n')
     );
     expect(pathGroupingSource).toContain(
-      'export const create_users_accessor = (sender: AccessorSender): users => ({'
+      [
+        'export const create_users_accessor = <TContext>(',
+        '  sender: AccessorSender<TContext>,',
+        '  ...[context]: AccessorContextArgument<TContext>',
+        '): users => ({',
+      ].join('\n')
     );
   });
 

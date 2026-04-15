@@ -267,7 +267,14 @@ describe('xml comments integration', () => {
 
     expect(
       getInterfaceDocumentation(generatedSource, 'AccessorRequestDescriptor')
-    ).toBe('/** Prepared request descriptor used by generated accessors. */');
+    ).toBe(
+      [
+        '/**',
+        ' * Prepared request descriptor used by generated accessors.',
+        ' * @typeParam TRequestBody Request body payload type.',
+        ' */',
+      ].join('\n')
+    );
     expect(requestDescriptorBlock).toContain('readonly operationName: string;');
     expect(fetchSenderOptionsBlock).toContain(
       'readonly baseUrl: string | URL;'
@@ -304,9 +311,22 @@ describe('xml comments integration', () => {
         ' * Sender function used by generated accessors.',
         ' * @typeParam TResponse Response payload type.',
         ' * @typeParam TRequestBody Request body payload type.',
+        ' * @typeParam TContext Context value type passed to the sender.',
         ' * @param request Prepared request descriptor.',
+        ' * @param context Context value bound when creating the accessor implementation.',
         ' * @param signal Abort signal used to cancel the request.',
         ' * @returns Promise that resolves to the typed response payload.',
+        ' */',
+      ].join('\n')
+    );
+    expect(
+      getTypeAliasDocumentation(generatedSource, 'AccessorContextArgument')
+    ).toBe(
+      [
+        '/**',
+        ' * Tuple type that controls whether a bound accessor context argument is required.',
+        ' * @typeParam TContext Context value type passed to the sender.',
+        ' * @remarks When `TContext` is `undefined`, the tuple allows the context argument to be omitted.',
         ' */',
       ].join('\n')
     );
@@ -342,6 +362,7 @@ describe('xml comments integration', () => {
         ' * @param options Options that configure the fetch-based sender.',
         ' * @returns Sender implementation that executes requests via the fetch API.',
         ' * @remarks When `options.fetch` is omitted, `globalThis.fetch` must be available.',
+        ' * Accessor context values are ignored by this sender implementation.',
         ' */',
       ].join('\n')
     );
@@ -351,8 +372,11 @@ describe('xml comments integration', () => {
       [
         '/**',
         ' * Creates a xml_comments accessor implementation.',
+        ' * @typeParam TContext Context value type passed to the sender.',
         ' * @param sender Sender implementation used to execute generated requests.',
+        ' * @param context Context value passed to the sender for every accessor call. This may be ignored depending on the sender.',
         ' * @returns xml_comments accessor implementation bound to the provided sender.',
+        ' * @remarks The context argument can be omitted only when `TContext` is `undefined`.',
         ' */',
       ].join('\n')
     );

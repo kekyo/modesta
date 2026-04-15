@@ -48,6 +48,8 @@ export default defineConfig({
       external: [
         'fs/promises',
         'fs',
+        'http',
+        'https',
         'path',
         'url',
         'vite',

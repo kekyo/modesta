@@ -128,12 +128,14 @@ describe('reference reuse generation', () => {
     expect(wrappedUser).toContain('role: string;');
   });
 
-  it('reuses shared schema references in operation response aliases', () => {
-    expect(
-      getTypeAliasStatement(generatedSource, 'GetUsers_get_response')
-    ).toBe('export type GetUsers_get_response = UserCollection;');
-    expect(
-      getTypeAliasStatement(generatedSource, 'GetWrappedUser_get_response')
-    ).toBe('export type GetWrappedUser_get_response = WrappedUser;');
+  it('uses shared schema references directly in operation response signatures', () => {
+    expect(generatedSource).toContain(
+      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<UserCollection>;'
+    );
+    expect(generatedSource).toContain(
+      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<WrappedUser>;'
+    );
+    expect(generatedSource).not.toContain('GetUsers_get_response');
+    expect(generatedSource).not.toContain('GetWrappedUser_get_response');
   });
 });

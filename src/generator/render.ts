@@ -10,6 +10,7 @@ import {
   OpenApiContext,
   OperationDefinition,
   ParameterDefinition,
+  RequestBodyDefinition,
   ResponseDefinition,
   SchemaDefinition,
 } from './types';
@@ -95,9 +96,9 @@ export const renderApiDefinition = (
       push();
     }
 
-    push(renderAccessorInterfaces(accessorGroup));
+    push(renderAccessorInterfaces(context, accessorGroup));
     push();
-    push(renderAccessorFactory(accessorGroup));
+    push(renderAccessorFactory(context, accessorGroup));
     push();
   }
 
@@ -154,7 +155,10 @@ const renderOperationDefinition = (
       )
     );
   }
-  if (operation.requestBody != null) {
+  if (
+    operation.requestBody != null &&
+    shouldRenderOperationSchemaDefinition(context, operation.requestBody.schema)
+  ) {
     sections.push(
       renderNamedTypeDefinition(
         context,
@@ -210,7 +214,7 @@ const renderOperationDefinition = (
     argumentMembers.push(
       renderInterfaceMember(
         'body',
-        operation.requestBody.typeName,
+        getOperationRequestBodyTypeExpression(context, operation.requestBody),
         operation.requestBody.required === false,
         operation.requestBody.parameterDescription ?? 'JSON request body.'
       )
@@ -225,7 +229,13 @@ const renderOperationDefinition = (
     )
   );
 
-  sections.push(renderResponseDefinition(context, operation.response));
+  const renderedResponseDefinition = renderResponseDefinition(
+    context,
+    operation.response
+  );
+  if (renderedResponseDefinition != null) {
+    sections.push(renderedResponseDefinition);
+  }
 
   return sections.join('\n\n');
 };
@@ -252,14 +262,14 @@ const renderResponseDefinition = (
   context: OpenApiContext,
   response: ResponseDefinition
 ) => {
-  const description = getResponseDocumentationDescription(response);
-  if (response.schema == null) {
-    return [
-      renderDocumentationComment(description),
-      `export type ${response.typeName} = void;`,
-    ].join('\n');
+  if (
+    response.schema == null ||
+    shouldRenderOperationSchemaDefinition(context, response.schema) === false
+  ) {
+    return undefined;
   }
 
+  const description = getResponseDocumentationDescription(response);
   return renderNamedTypeDefinition(
     context,
     response.typeName,
@@ -272,6 +282,7 @@ const getAccessorWithContextInterfaceName = (interfaceName: string) =>
   `${interfaceName}_with_context`;
 
 const renderAccessorInterface = (
+  context: OpenApiContext,
   accessorGroup: AccessorGroupDefinition,
   withContext: boolean
 ) => {
@@ -283,17 +294,19 @@ const renderAccessorInterface = (
     const optionsArgument = withContext
       ? `options: ${optionsType}`
       : `options?: ${optionsType} | undefined`;
+    const responseTypeExpression = getOperationResponseTypeExpression(
+      context,
+      operation.response
+    );
     const signature =
       argumentMode === 'none'
-        ? `(${optionsArgument}) => Promise<${getOperationResponseTypeExpression(operation.response)}>`
+        ? `(${optionsArgument}) => Promise<${responseTypeExpression}>`
         : `(${[
             argumentMode === 'required'
               ? `args: ${operation.argumentsTypeName}`
               : `args?: ${operation.argumentsTypeName} | undefined`,
             optionsArgument,
-          ].join(
-            ', '
-          )}) => Promise<${getOperationResponseTypeExpression(operation.response)}>`;
+          ].join(', ')}) => Promise<${responseTypeExpression}>`;
     const argumentDescription =
       argumentMode === 'none'
         ? undefined
@@ -326,13 +339,19 @@ const renderAccessorInterface = (
   );
 };
 
-const renderAccessorInterfaces = (accessorGroup: AccessorGroupDefinition) =>
+const renderAccessorInterfaces = (
+  context: OpenApiContext,
+  accessorGroup: AccessorGroupDefinition
+) =>
   [
-    renderAccessorInterface(accessorGroup, false),
-    renderAccessorInterface(accessorGroup, true),
+    renderAccessorInterface(context, accessorGroup, false),
+    renderAccessorInterface(context, accessorGroup, true),
   ].join('\n\n');
 
-const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
+const renderAccessorFactory = (
+  context: OpenApiContext,
+  accessorGroup: AccessorGroupDefinition
+) => {
   const lines: string[] = [];
   const push = (value = '') => {
     lines.push(value);
@@ -414,9 +433,17 @@ const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
         : argumentMode === 'required'
           ? 'args, options'
           : 'args, options';
+    const responseTypeExpression = getOperationResponseTypeExpression(
+      context,
+      operation.response
+    );
+    const requestBodyTypeExpression =
+      operation.requestBody != null
+        ? getOperationRequestBodyTypeExpression(context, operation.requestBody)
+        : 'undefined';
 
     push(
-      `    ${renderPropertyName(operation.memberName)}: async (${argumentToken}) => sender<${getOperationResponseTypeExpression(operation.response)}, ${operation.requestBody?.typeName ?? 'undefined'}>({`
+      `    ${renderPropertyName(operation.memberName)}: async (${argumentToken}) => sender<${responseTypeExpression}, ${requestBodyTypeExpression}>({`
     );
     push(
       `      operationName: ${renderLiteral(operation.descriptorOperationName)},`
@@ -703,8 +730,59 @@ const getOperationArgumentMode = (operation: OperationDefinition) => {
   return requiresArguments ? ('required' as const) : ('optional' as const);
 };
 
-const getOperationResponseTypeExpression = (response: ResponseDefinition) =>
-  response.schema == null ? 'void' : response.typeName;
+const isSimpleOperationTypeExpression = (typeExpression: string) => {
+  return (
+    typeExpression.includes('\n') === false &&
+    typeExpression.includes('{') === false &&
+    typeExpression.includes('}') === false
+  );
+};
+
+const getOperationSchemaTypeExpression = (
+  context: OpenApiContext,
+  schema: JsonRecord,
+  typeName: string
+) => {
+  const typeExpression = renderTypeExpression(context, schema, 0);
+  return isSimpleOperationTypeExpression(typeExpression)
+    ? typeExpression
+    : typeName;
+};
+
+const shouldRenderOperationSchemaDefinition = (
+  context: OpenApiContext,
+  schema: JsonRecord
+) => {
+  return (
+    isSimpleOperationTypeExpression(
+      renderTypeExpression(context, schema, 0)
+    ) === false
+  );
+};
+
+const getOperationRequestBodyTypeExpression = (
+  context: OpenApiContext,
+  requestBody: RequestBodyDefinition
+) => {
+  return getOperationSchemaTypeExpression(
+    context,
+    requestBody.schema,
+    requestBody.typeName
+  );
+};
+
+const getOperationResponseTypeExpression = (
+  context: OpenApiContext,
+  response: ResponseDefinition
+) => {
+  return response.schema == null
+    ? 'void'
+    : getOperationSchemaTypeExpression(
+        context,
+        response.schema,
+        response.typeName
+      );
+};
 
 const getReferenceTypeExpression = (
   context: OpenApiContext,

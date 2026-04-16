@@ -18,7 +18,6 @@ import {
   getInterfaceBlock,
   getInterfaceDocumentation,
   getTypeAliasDocumentation,
-  getTypeAliasStatement,
 } from './support/source-assertions';
 
 const xmlCommentsProject: SwaggerFixtureProject = {
@@ -430,55 +429,44 @@ describe('xml comments integration', () => {
     );
   });
 
-  it('renders body parameter comments on args.body and keeps schema comments on the request type', () => {
+  it('renders body parameter comments on args.body while using the shared request type directly', () => {
     const argumentsBlock = getInterfaceBlock(
       generatedSource,
       'xml_comments_post_documented_arguments'
     );
 
-    expect(argumentsBlock).toContain(
-      'body?: xml_comments_post_documented_request_body;'
-    );
+    expect(argumentsBlock).toContain('body?: CreateDocumentedRequest;');
     expectMemberDocumentation(
       argumentsBlock,
       'body',
       '/** Documented request body. */'
     );
-    expect(
-      getTypeAliasDocumentation(
-        generatedSource,
-        'xml_comments_post_documented_request_body'
-      )
-    ).toBe('/** Request schema described by XML comments. */');
-    expect(
-      getTypeAliasStatement(
-        generatedSource,
-        'xml_comments_post_documented_request_body'
-      )
-    ).toBe(
-      'export type xml_comments_post_documented_request_body = CreateDocumentedRequest;'
+    expect(generatedSource).not.toContain(
+      'xml_comments_post_documented_request_body'
     );
   });
 
-  it('renders response comments on generated response types', () => {
-    expect(
-      getTypeAliasDocumentation(
-        generatedSource,
-        'xml_comments_get_documented_response'
-      )
-    ).toBe('/** XML documented success response. */');
-    expect(
-      getTypeAliasDocumentation(
-        generatedSource,
-        'xml_comments_post_documented_response'
-      )
-    ).toBe('/** XML documented create response. */');
-    expect(
-      getTypeAliasDocumentation(
-        generatedSource,
-        'xml_comments_get_returns_only_response'
-      )
-    ).toBe('/** OK */');
+  it('uses shared response types directly on accessor signatures', () => {
+    const accessorBlock = getInterfaceBlock(generatedSource, 'xml_comments');
+
+    expect(accessorBlock).toContain(
+      'readonly get_documented: (args?: xml_comments_get_documented_arguments | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentedEnvelope>;'
+    );
+    expect(accessorBlock).toContain(
+      'readonly post_documented: (args?: xml_comments_post_documented_arguments | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentedEnvelope>;'
+    );
+    expect(accessorBlock).toContain(
+      'readonly get_returns_only: (options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentedEnvelope>;'
+    );
+    expect(generatedSource).not.toContain(
+      'xml_comments_get_documented_response'
+    );
+    expect(generatedSource).not.toContain(
+      'xml_comments_post_documented_response'
+    );
+    expect(generatedSource).not.toContain(
+      'xml_comments_get_returns_only_response'
+    );
   });
 
   it('renders schema and property comments on generated schema types', () => {

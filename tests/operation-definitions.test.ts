@@ -10,10 +10,7 @@ import {
   SwaggerFixtureProject,
   transpileGeneratedSource,
 } from './support/harness';
-import {
-  getInterfaceBlock,
-  getTypeAliasStatement,
-} from './support/source-assertions';
+import { getInterfaceBlock } from './support/source-assertions';
 
 const operationProject: SwaggerFixtureProject = {
   files: {
@@ -113,22 +110,28 @@ describe('operation definition generation', () => {
     expect(headerParametersBlock).toContain("'x-api-key': string;");
   });
 
-  it('separates body parameter definitions', () => {
-    expect(
-      getTypeAliasStatement(generatedSource, 'CreateItem_post_request_body')
-    ).toBe('export type CreateItem_post_request_body = CreateItemRequest;');
+  it('uses shared schema types directly for body parameters', () => {
+    const argumentsBlock = getInterfaceBlock(
+      generatedSource,
+      'CreateItem_post_arguments'
+    );
+
+    expect(argumentsBlock).toContain('body: CreateItemRequest;');
+    expect(generatedSource).not.toContain('CreateItem_post_request_body');
   });
 
-  it('reuses shared schema references for direct response definitions', () => {
-    expect(
-      getTypeAliasStatement(generatedSource, 'GetRouteValue_get_response')
-    ).toBe('export type GetRouteValue_get_response = SimpleRecord;');
+  it('uses shared schema types directly for direct response definitions', () => {
+    expect(generatedSource).toContain(
+      'readonly get: (args: GetRouteValue_get_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<SimpleRecord>;'
+    );
+    expect(generatedSource).not.toContain('GetRouteValue_get_response');
   });
 
-  it('reuses shared schema references for array return type definitions', () => {
-    expect(
-      getTypeAliasStatement(generatedSource, 'ListItems_get_response')
-    ).toBe('export type ListItems_get_response = Array<SimpleRecord>;');
+  it('uses shared schema types directly for array return type definitions', () => {
+    expect(generatedSource).toContain(
+      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<Array<SimpleRecord>>;'
+    );
+    expect(generatedSource).not.toContain('ListItems_get_response');
   });
 
   it('separates dictionary return type definitions', () => {
@@ -140,21 +143,19 @@ describe('operation definition generation', () => {
     expect(dictionaryResponseBlock).toContain('[key: string]: SimpleRecord;');
   });
 
-  it('separates void return type definitions', () => {
-    expect(
-      getTypeAliasStatement(generatedSource, 'DeleteItem_delete_response')
-    ).toBe('export type DeleteItem_delete_response = void;');
+  it('uses void directly for empty responses', () => {
     expect(generatedSource).toContain(
       '_delete: (args: DeleteItem_delete_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
     );
+    expect(generatedSource).not.toContain('DeleteItem_delete_response');
   });
 
   it('omits args from no-argument accessor signatures', () => {
     expect(generatedSource).toContain(
-      'get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ListItems_get_response>;'
+      'get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<Array<SimpleRecord>>;'
     );
     expect(generatedSource).not.toContain(
-      'get: (args?: ListItems_get_arguments | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<ListItems_get_response>;'
+      'get: (args?: ListItems_get_arguments | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<Array<SimpleRecord>>;'
     );
   });
 

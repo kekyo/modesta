@@ -104,13 +104,11 @@ export interface GetUser_get_arguments {
   id: string;
 }
 
-export type GetUser_get_response = User;
-
 export interface GetUser {
   get: (
     args: GetUser_get_arguments,
     options?: AccessorOptions | undefined
-  ) => Promise<GetUser_get_response>;
+  ) => Promise<User>;
 }
 
 export function create_GetUser_accessor(

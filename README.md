@@ -355,7 +355,7 @@ modesta derives public names from either `operationId` or the path.
 - Path parameters are reflected in method names in the form `by_<name>`
 - Characters that cannot be used in identifiers are normalized to `_`, and reserved words are escaped
 
-For example, `GET /users/{id}` becomes roughly the following shape when no `operationId` is present:
+For example, `GET /users/{id}` becomes roughly the following shape when no `operationId` is present (partially omitted):
 
 ```typescript
 export interface users {

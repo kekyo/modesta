@@ -14,6 +14,7 @@ import {
   getConstDocumentation,
   expectMemberDocumentation,
   expectMethodDocumentation,
+  getFunctionDocumentation,
   getInterfaceBlock,
   getInterfaceDocumentation,
   getTypeAliasDocumentation,
@@ -319,16 +320,8 @@ describe('xml comments integration', () => {
         ' */',
       ].join('\n')
     );
-    expect(
-      getTypeAliasDocumentation(generatedSource, 'AccessorContextArgument')
-    ).toBe(
-      [
-        '/**',
-        ' * Tuple type that controls whether a bound accessor context argument is required.',
-        ' * @typeParam TContext Context value type passed to the sender.',
-        ' * @remarks When `TContext` is `undefined`, the tuple allows the context argument to be omitted.',
-        ' */',
-      ].join('\n')
+    expect(generatedSource).not.toContain(
+      'export type AccessorContextArgument'
     );
 
     expect(
@@ -367,7 +360,7 @@ describe('xml comments integration', () => {
       ].join('\n')
     );
     expect(
-      getConstDocumentation(generatedSource, 'create_xml_comments_accessor')
+      getFunctionDocumentation(generatedSource, 'create_xml_comments_accessor')
     ).toBe(
       [
         '/**',
@@ -376,7 +369,7 @@ describe('xml comments integration', () => {
         ' * @param sender Sender implementation used to execute generated requests.',
         ' * @param context Context value passed to the sender for every accessor call. This may be ignored depending on the sender.',
         ' * @returns xml_comments accessor implementation bound to the provided sender.',
-        ' * @remarks The context argument can be omitted only when `TContext` is `undefined`.',
+        ' * @remarks The context argument can be omitted when the sender accepts `undefined` as its context type.',
         ' */',
       ].join('\n')
     );

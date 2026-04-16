@@ -349,7 +349,7 @@ modesta は公開名を `operationId` またはパスから導出します。
 - パスパラメータは `by_<name>` 形式でメソッド名に反映されます
 - 識別子として使えない文字は `_` に正規化され、予約語は回避されます
 
-例えば、`/users/{id}` の `GET` は、`operationId` が無ければ概ね次のような形になります:
+例えば、`/users/{id}` の `GET` は、`operationId` が無ければ概ね次のような形になります（一部省略）:
 
 ```typescript
 export interface users {

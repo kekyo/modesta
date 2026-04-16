@@ -177,26 +177,41 @@ describe('naming and grouping rules', () => {
 
     expect(pathGroupingSource).toContain(
       [
-        'export const create_xml_comments_accessor = <TContext>(',
+        'export function create_xml_comments_accessor(sender: AccessorSender<undefined>): xml_comments;',
+        'export function create_xml_comments_accessor<TContext>(',
         '  sender: AccessorSender<TContext>,',
-        '  ...[context]: AccessorContextArgument<TContext>',
-        '): xml_comments => ({',
+        '  context: TContext',
+        '): xml_comments;',
+        'export function create_xml_comments_accessor<TContext>(',
+        '  sender: AccessorSender<TContext>,',
+        '  context?: TContext',
+        '): xml_comments {',
       ].join('\n')
     );
     expect(pathGroupingSource).toContain(
       [
-        'export const create_another_accessor = <TContext>(',
+        'export function create_another_accessor(sender: AccessorSender<undefined>): another;',
+        'export function create_another_accessor<TContext>(',
         '  sender: AccessorSender<TContext>,',
-        '  ...[context]: AccessorContextArgument<TContext>',
-        '): another => ({',
+        '  context: TContext',
+        '): another;',
+        'export function create_another_accessor<TContext>(',
+        '  sender: AccessorSender<TContext>,',
+        '  context?: TContext',
+        '): another {',
       ].join('\n')
     );
     expect(pathGroupingSource).toContain(
       [
-        'export const create_users_accessor = <TContext>(',
+        'export function create_users_accessor(sender: AccessorSender<undefined>): users;',
+        'export function create_users_accessor<TContext>(',
         '  sender: AccessorSender<TContext>,',
-        '  ...[context]: AccessorContextArgument<TContext>',
-        '): users => ({',
+        '  context: TContext',
+        '): users;',
+        'export function create_users_accessor<TContext>(',
+        '  sender: AccessorSender<TContext>,',
+        '  context?: TContext',
+        '): users {',
       ].join('\n')
     );
   });

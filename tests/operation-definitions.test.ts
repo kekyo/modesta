@@ -161,22 +161,35 @@ describe('operation definition generation', () => {
     );
   });
 
-  it('uses a helper type for bound accessor context', () => {
-    expect(
-      getTypeAliasStatement(generatedSource, 'AccessorContextArgument')
-    ).toBe(
-      [
-        'export type AccessorContextArgument<TContext> = [TContext] extends [undefined]',
-        '    ? [context?: TContext]',
-        '    : [context: TContext];',
-      ].join('\n')
+  it('renders accessor factories as overload functions for bound context', () => {
+    expect(generatedSource).not.toContain(
+      'export type AccessorContextArgument'
     );
     expect(generatedSource).toContain(
       [
-        'export const create_GetRouteValue_accessor = <TContext>(',
+        'export function create_GetRouteValue_accessor(sender: AccessorSender<undefined>): GetRouteValue;',
+        'export function create_GetRouteValue_accessor<TContext>(',
         '  sender: AccessorSender<TContext>,',
-        '  ...[context]: AccessorContextArgument<TContext>',
-        '): GetRouteValue => ({',
+        '  context: TContext',
+        '): GetRouteValue;',
+        'export function create_GetRouteValue_accessor<TContext>(',
+        '  sender: AccessorSender<TContext>,',
+        '  context?: TContext',
+        '): GetRouteValue {',
+      ].join('\n')
+    );
+  });
+
+  it('allows omitted context through overloads when the sender context type includes undefined', () => {
+    expect(generatedSource).toContain(
+      'export function create_DeleteItem_accessor(sender: AccessorSender<undefined>): DeleteItem;'
+    );
+    expect(generatedSource).toContain(
+      [
+        'export function create_DeleteItem_accessor<TContext>(',
+        '  sender: AccessorSender<TContext>,',
+        '  context?: TContext',
+        '): DeleteItem {',
       ].join('\n')
     );
   });

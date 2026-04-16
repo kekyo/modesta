@@ -172,27 +172,6 @@ export const renderApiDefinition = (
   push('  signal: AbortSignal | undefined) => Promise<TResponse>;');
   push();
   push(
-    renderTaggedDocumentationComment(
-      'Tuple type that controls whether a bound accessor context argument is required.',
-      {
-        remarks:
-          'When `TContext` is `undefined`, the tuple allows the context argument to be omitted.',
-        typeParams: [
-          {
-            description: 'Context value type passed to the sender.',
-            name: 'TContext',
-          },
-        ],
-      }
-    )
-  );
-  push(
-    'export type AccessorContextArgument<TContext> = [TContext] extends [undefined]'
-  );
-  push('    ? [context?: TContext]');
-  push('    : [context: TContext];');
-  push();
-  push(
     renderInterfaceDefinition(
       'CreateFetchSenderOptions',
       'Options that configure the fetch-based sender.',
@@ -612,7 +591,7 @@ const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
           },
         ],
         remarks:
-          'The context argument can be omitted only when `TContext` is `undefined`.',
+          'The context argument can be omitted when the sender accepts `undefined` as its context type.',
         typeParams: [
           {
             description: 'Context value type passed to the sender.',
@@ -623,10 +602,18 @@ const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
       }
     )
   );
-  push(`export const ${accessorGroup.factoryName} = <TContext>(`);
+  push(
+    `export function ${accessorGroup.factoryName}(sender: AccessorSender<undefined>): ${accessorGroup.interfaceName};`
+  );
+  push(`export function ${accessorGroup.factoryName}<TContext>(`);
   push('  sender: AccessorSender<TContext>,');
-  push('  ...[context]: AccessorContextArgument<TContext>');
-  push(`): ${accessorGroup.interfaceName} => ({`);
+  push('  context: TContext');
+  push(`): ${accessorGroup.interfaceName};`);
+  push(`export function ${accessorGroup.factoryName}<TContext>(`);
+  push('  sender: AccessorSender<TContext>,');
+  push('  context?: TContext');
+  push(`): ${accessorGroup.interfaceName} {`);
+  push('  return {');
 
   for (const operation of accessorGroup.operations) {
     const argumentMode = getOperationArgumentMode(operation);
@@ -638,14 +625,14 @@ const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
           : 'args, signal';
 
     push(
-      `  ${renderPropertyName(operation.memberName)}: async (${argumentToken}) => sender<${getOperationResponseTypeExpression(operation.response)}, ${operation.requestBody?.typeName ?? 'undefined'}>({`
+      `    ${renderPropertyName(operation.memberName)}: async (${argumentToken}) => sender<${getOperationResponseTypeExpression(operation.response)}, ${operation.requestBody?.typeName ?? 'undefined'}>({`
     );
     push(
-      `    operationName: ${renderLiteral(operation.descriptorOperationName)},`
+      `      operationName: ${renderLiteral(operation.descriptorOperationName)},`
     );
-    push(`    method: ${renderLiteral(operation.method)},`);
+    push(`      method: ${renderLiteral(operation.method)},`);
     push(
-      `    url: modestaBuildUrl(${[
+      `      url: modestaBuildUrl(${[
         renderLiteral(operation.path),
         renderPathParameterArgumentObject(operation),
         operation.queryParameters.length > 0
@@ -656,15 +643,16 @@ const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
       ].join(', ')}),`
     );
     push(
-      `    headers: modestaBuildHeaders(${operation.headerParameters.length > 0 ? (argumentMode === 'optional' ? 'args?.headerParameters ?? {}' : 'args.headerParameters ?? {}') : '{}'}, ${operation.requestBody?.contentType != null ? renderLiteral(operation.requestBody.contentType) : 'undefined'}, ${operation.response.accept != null ? renderLiteral(operation.response.accept) : 'undefined'}),`
+      `      headers: modestaBuildHeaders(${operation.headerParameters.length > 0 ? (argumentMode === 'optional' ? 'args?.headerParameters ?? {}' : 'args.headerParameters ?? {}') : '{}'}, ${operation.requestBody?.contentType != null ? renderLiteral(operation.requestBody.contentType) : 'undefined'}, ${operation.response.accept != null ? renderLiteral(operation.response.accept) : 'undefined'}),`
     );
     push(
-      `    body: ${operation.requestBody != null ? (argumentMode === 'optional' ? 'args?.body' : 'args.body') : 'undefined'},`
+      `      body: ${operation.requestBody != null ? (argumentMode === 'optional' ? 'args?.body' : 'args.body') : 'undefined'},`
     );
-    push('  }, context, signal),');
+    push('    }, context, signal),');
   }
 
-  push('});');
+  push('  };');
+  push('}');
   return lines.join('\n');
 };
 

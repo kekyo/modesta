@@ -198,6 +198,23 @@ export const getConstDocumentation = (source: string, constName: string) => {
   );
 };
 
+export const getFunctionDocumentation = (
+  source: string,
+  functionName: string
+) => {
+  const marker = `export function ${functionName}`;
+  const functionIndex = source.indexOf(marker);
+  if (functionIndex < 0) {
+    throw new Error(`Could not find function '${functionName}'.`);
+  }
+
+  return findDocumentationBeforeIndex(
+    source,
+    functionIndex,
+    `function '${functionName}'`
+  );
+};
+
 export const expectMemberDocumentation = (
   block: string,
   memberName: string,

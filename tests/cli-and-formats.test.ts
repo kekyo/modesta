@@ -130,18 +130,28 @@ describe('CLI and format support', () => {
     expect(generatedSource).toContain('export interface ListSummaries {');
     expect(generatedSource).toContain(
       [
-        'export const create_LookupSummaries_accessor = <TContext>(',
+        'export function create_LookupSummaries_accessor(sender: AccessorSender<undefined>): LookupSummaries;',
+        'export function create_LookupSummaries_accessor<TContext>(',
         '  sender: AccessorSender<TContext>,',
-        '  ...[context]: AccessorContextArgument<TContext>',
-        '): LookupSummaries => ({',
+        '  context: TContext',
+        '): LookupSummaries;',
+        'export function create_LookupSummaries_accessor<TContext>(',
+        '  sender: AccessorSender<TContext>,',
+        '  context?: TContext',
+        '): LookupSummaries {',
       ].join('\n')
     );
     expect(generatedSource).toContain(
       [
-        'export const create_ListSummaries_accessor = <TContext>(',
+        'export function create_ListSummaries_accessor(sender: AccessorSender<undefined>): ListSummaries;',
+        'export function create_ListSummaries_accessor<TContext>(',
         '  sender: AccessorSender<TContext>,',
-        '  ...[context]: AccessorContextArgument<TContext>',
-        '): ListSummaries => ({',
+        '  context: TContext',
+        '): ListSummaries;',
+        'export function create_ListSummaries_accessor<TContext>(',
+        '  sender: AccessorSender<TContext>,',
+        '  context?: TContext',
+        '): ListSummaries {',
       ].join('\n')
     );
     expect(generatedSource).toContain(
@@ -201,10 +211,15 @@ describe('CLI and format support', () => {
     expect(stdout).toContain('export interface ListSummaries {');
     expect(stdout).toContain(
       [
-        'export const create_LookupSummaries_accessor = <TContext>(',
+        'export function create_LookupSummaries_accessor(sender: AccessorSender<undefined>): LookupSummaries;',
+        'export function create_LookupSummaries_accessor<TContext>(',
         '  sender: AccessorSender<TContext>,',
-        '  ...[context]: AccessorContextArgument<TContext>',
-        '): LookupSummaries => ({',
+        '  context: TContext',
+        '): LookupSummaries;',
+        'export function create_LookupSummaries_accessor<TContext>(',
+        '  sender: AccessorSender<TContext>,',
+        '  context?: TContext',
+        '): LookupSummaries {',
       ].join('\n')
     );
     expect(stdout).not.toContain('// Source file:');

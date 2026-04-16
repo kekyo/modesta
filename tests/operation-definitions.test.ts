@@ -4,7 +4,6 @@
 // https://github.com/kekyo/modesta/
 
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { generateAccessorSource } from '../src/generator';
 import {
   generateAccessorSourceFromProject,
   SwaggerFixtureProject,
@@ -77,9 +76,160 @@ const operationProject: SwaggerFixtureProject = {
   },
 };
 
+const operationEdgeCaseProject: SwaggerFixtureProject = {
+  files: {
+    'Program.cs': [
+      'using Microsoft.AspNetCore.Mvc;',
+      '',
+      'var builder = WebApplication.CreateBuilder(args);',
+      'builder.Services.AddEndpointsApiExplorer();',
+      'builder.Services.AddSwaggerGen(options =>',
+      '    {',
+      '        options.SupportNonNullableReferenceTypes();',
+      '        options.NonNullableReferenceTypesAsRequired();',
+      '        options.OperationFilter<ResponseHeaderOperationFilter>();',
+      '    });',
+      'var app = builder.Build();',
+      'app.UseSwagger();',
+      '',
+      'app.MapGet("/users/{user_id}", ([FromRoute] string user_id) =>',
+      '    TypedResults.Ok(new CollisionValueResponse(user_id)))',
+      '    .WithName("GetUser");',
+      '',
+      'app.MapGet("/items/{id}", ([FromRoute] string id, [FromQuery(Name = "id")] string? queryId, [FromHeader(Name = "id")] string? headerId) =>',
+      '    TypedResults.Ok(new CollisionValueResponse($"{id}:{queryId}:{headerId}")))',
+      '    .WithName("GetDuplicateParameters");',
+      '',
+      'app.MapGet("/normalized-collision", ([FromQuery(Name = "x-api-key")] string? queryKey, [FromHeader(Name = "x.api.key")] string? headerKey) =>',
+      '    TypedResults.Ok(new CollisionValueResponse($"{queryKey}:{headerKey}")))',
+      '    .WithName("GetNormalizedCollision");',
+      '',
+      'app.MapGet("/normalized-distinct/{user_id}", ([FromRoute] string user_id, [FromQuery(Name = "user-id")] string? userId, [FromHeader(Name = "tenant.id")] string? tenantId) =>',
+      '    TypedResults.Ok(new CollisionValueResponse($"{user_id}:{userId}:{tenantId}")))',
+      '    .WithName("GetNormalizedDistinct");',
+      '',
+      'app.MapPost("/items/{id}", ([FromRoute] string id, [FromQuery(Name = "x-api-key")] string? queryApiKey, [FromHeader(Name = "x-api-key")] string? headerApiKey, [FromBody] CreateCollisionItemRequest request) =>',
+      '    TypedResults.Ok(new CollisionValueResponse(request.Name)))',
+      '    .WithName("CreateItem");',
+      '',
+      'app.MapPost("/text", ([FromBody] string body) => TypedResults.NoContent())',
+      '    .Accepts<string>("text/plain")',
+      '    .WithName("CreateText");',
+      '',
+      'app.MapPost("/text/{scope}", ([FromRoute] string scope, [FromHeader(Name = "x-trace-id")] string? traceId, [FromBody] string body) => TypedResults.NoContent())',
+      '    .Accepts<string>("text/plain")',
+      '    .WithName("CreateScopedText");',
+      '',
+      'app.MapPost("/number-list", ([FromBody] int[] values) => TypedResults.NoContent())',
+      '    .WithName("CreateNumberList");',
+      '',
+      'app.MapPut("/numbers/{scope}", ([FromRoute] string scope, [FromQuery(Name = "dry-run")] bool? dryRun, [FromBody] int[] values) => TypedResults.NoContent())',
+      '    .WithName("UpdateNumbers");',
+      '',
+      'app.MapGet("/token", () => Results.Empty)',
+      '    .Produces(StatusCodes.Status200OK)',
+      '    .WithName("GetToken");',
+      '',
+      'app.MapGet("/document", () =>',
+      '    TypedResults.Ok(new DocumentResponse("alpha")))',
+      '    .WithName("GetDocument");',
+      '',
+      'app.MapGet("/plain-message", () => TypedResults.Text("hello"))',
+      '    .Produces<string>(StatusCodes.Status200OK, "text/plain")',
+      '    .WithName("GetPlainMessage");',
+      '',
+      'app.MapGet("/numbers", () => TypedResults.Ok(new[] { 1, 2, 3 }))',
+      '    .WithName("GetNumbers");',
+      '',
+      'app.MapGet("/message", () => TypedResults.Text("hello"))',
+      '    .Produces<string>(StatusCodes.Status200OK, "text/plain")',
+      '    .WithName("GetMessage");',
+      '',
+      'app.MapGet("/number-message", () => TypedResults.Ok(new[] { 1, 2, 3 }))',
+      '    .WithName("GetNumberMessage");',
+      '',
+      'app.MapGet("/response-collision", () =>',
+      '    TypedResults.Ok(new ResponseCollisionBody("body-tag")))',
+      '    .WithName("GetResponseCollision");',
+      '',
+      'app.Run();',
+      '',
+    ].join('\n'),
+    'Models.cs': [
+      'public sealed record CollisionValueResponse(string Value);',
+      'public sealed record CreateCollisionItemRequest(string Id, string XApiKey, string Name);',
+      'public sealed record DocumentResponse(string Value);',
+      'public sealed record ResponseCollisionBody(string Etag);',
+      '',
+    ].join('\n'),
+    'ResponseHeaderOperationFilter.cs': [
+      'using Microsoft.OpenApi.Models;',
+      'using Swashbuckle.AspNetCore.SwaggerGen;',
+      '',
+      'public sealed class ResponseHeaderOperationFilter : IOperationFilter',
+      '{',
+      '    public void Apply(OpenApiOperation operation, OperationFilterContext context)',
+      '    {',
+      '        if (operation.OperationId is null)',
+      '        {',
+      '            return;',
+      '        }',
+      '',
+      '        if (!operation.Responses.TryGetValue("200", out var response))',
+      '        {',
+      '            return;',
+      '        }',
+      '',
+      '        switch (operation.OperationId)',
+      '        {',
+      '            case "GetToken":',
+      '                AddStringHeader(response, "x-request-id", "Request identifier.");',
+      '                break;',
+      '            case "GetDocument":',
+      '                AddStringHeader(response, "etag", "Entity tag.");',
+      '                break;',
+      '            case "GetMessage":',
+      '                AddStringHeader(response, "etag", "Entity tag.");',
+      '                break;',
+      '            case "GetNumberMessage":',
+      '                AddStringHeader(response, "etag", "Entity tag.");',
+      '                break;',
+      '            case "GetResponseCollision":',
+      '                AddStringHeader(response, "etag", "Entity tag.");',
+      '                AddStringHeader(response, "x-api-key", "Primary collision key.");',
+      '                AddStringHeader(response, "x.api.key", "Secondary collision key.");',
+      '                break;',
+      '        }',
+      '    }',
+      '',
+      '    private static void AddStringHeader(OpenApiResponse response, string name, string description)',
+      '    {',
+      '        response.Headers ??= new Dictionary<string, OpenApiHeader>();',
+      '        response.Headers[name] = new OpenApiHeader',
+      '        {',
+      '            Description = description,',
+      '            Schema = new OpenApiSchema',
+      '            {',
+      '                Type = "string",',
+      '            },',
+      '        };',
+      '    }',
+      '}',
+      '',
+    ].join('\n'),
+  },
+};
+
 describe('operation definition generation', () => {
   let generatedSource = '';
   let generatedModule: Record<string, any>;
+  let edgeCaseGeneratedSource = '';
+  let edgeCaseGeneratedModule: Record<string, any>;
+  const edgeCaseWarnings: string[] = [];
+  const getEdgeCaseWarnings = (accessorName: string) =>
+    edgeCaseWarnings.filter((message) =>
+      message.includes(`accessor '${accessorName}'`)
+    );
 
   beforeAll(async () => {
     generatedSource = await generateAccessorSourceFromProject({
@@ -88,6 +238,17 @@ describe('operation definition generation', () => {
       project: operationProject,
     });
     generatedModule = await transpileGeneratedSource(generatedSource);
+    edgeCaseGeneratedSource = await generateAccessorSourceFromProject({
+      artifactName: 'operation-definitions-edge-cases',
+      generatedArtifactPath: 'generated/operation-definitions-edge-cases.ts',
+      project: operationEdgeCaseProject,
+      warningSink: (message) => {
+        edgeCaseWarnings.push(message);
+      },
+    });
+    edgeCaseGeneratedModule = await transpileGeneratedSource(
+      edgeCaseGeneratedSource
+    );
   });
 
   it('flattens route parameter definitions into argument groups', () => {
@@ -153,7 +314,7 @@ describe('operation definition generation', () => {
 
   it('uses shared schema types directly for array return type definitions', () => {
     expect(generatedSource).toContain(
-      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<Array<SimpleRecord>>;'
+      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ReadonlyArray<SimpleRecord>>;'
     );
     expect(generatedSource).not.toContain('ListItems_get_response');
   });
@@ -176,10 +337,10 @@ describe('operation definition generation', () => {
 
   it('omits args from no-argument accessor signatures', () => {
     expect(generatedSource).toContain(
-      'get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<Array<SimpleRecord>>;'
+      'get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ReadonlyArray<SimpleRecord>>;'
     );
     expect(generatedSource).not.toContain(
-      'get: (args?: ListItems_get_arguments | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<Array<SimpleRecord>>;'
+      'get: (args?: ListItems_get_arguments | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<ReadonlyArray<SimpleRecord>>;'
     );
   });
 
@@ -243,6 +404,8 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       undefined,
       { signal }
@@ -266,6 +429,8 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       undefined,
       undefined
@@ -294,6 +459,8 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       undefined,
       { signal }
@@ -318,6 +485,8 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       undefined,
       undefined
@@ -344,6 +513,8 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       undefined,
       undefined
@@ -370,6 +541,8 @@ describe('operation definition generation', () => {
         body: {
           name: 'alpha',
         },
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       undefined,
       undefined
@@ -407,6 +580,8 @@ describe('operation definition generation', () => {
         body: {
           name: 'alpha',
         },
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       {
         traceId: 'trace-42',
@@ -444,6 +619,8 @@ describe('operation definition generation', () => {
         body: {
           name: 'alpha',
         },
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       undefined,
       undefined
@@ -469,6 +646,8 @@ describe('operation definition generation', () => {
         url: '/items/42',
         headers: {},
         body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       {
         traceId: 'trace-42',
@@ -556,122 +735,27 @@ describe('operation definition generation', () => {
   });
 
   it('retains underscores in normalized parameter names', () => {
-    const generated = generateAccessorSource({
-      document: {
-        openapi: '3.0.3',
-        info: {
-          title: 'Underscore parameters',
-          version: '1.0.0',
-        },
-        paths: {
-          '/users/{user_id}': {
-            get: {
-              operationId: 'GetUser',
-              parameters: [
-                {
-                  in: 'path',
-                  name: 'user_id',
-                  required: true,
-                  schema: {
-                    type: 'string',
-                  },
-                },
-              ],
-              responses: {
-                '200': {
-                  description: 'OK',
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-
     const argumentsBlock = getInterfaceBlock(
-      generated,
+      edgeCaseGeneratedSource,
       'GetUser_get_arguments'
     );
     expect(argumentsBlock).toContain('user_id: string;');
   });
 
   it('renames duplicated parameter-only names and emits warnings without a request body', async () => {
-    const warnings: string[] = [];
-    const generated = generateAccessorSource({
-      document: {
-        openapi: '3.0.3',
-        info: {
-          title: 'Parameter-only collision',
-          version: '1.0.0',
-        },
-        paths: {
-          '/items/{id}': {
-            get: {
-              operationId: 'GetDuplicateParameters',
-              parameters: [
-                {
-                  in: 'path',
-                  name: 'id',
-                  required: true,
-                  schema: {
-                    type: 'string',
-                  },
-                },
-                {
-                  in: 'query',
-                  name: 'id',
-                  required: false,
-                  schema: {
-                    type: 'string',
-                  },
-                },
-                {
-                  in: 'header',
-                  name: 'id',
-                  required: false,
-                  schema: {
-                    type: 'string',
-                  },
-                },
-              ],
-              responses: {
-                '200': {
-                  description: 'OK',
-                  content: {
-                    'application/json': {
-                      schema: {
-                        type: 'object',
-                        required: ['value'],
-                        properties: {
-                          value: {
-                            type: 'string',
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      warningSink: (message) => {
-        warnings.push(message);
-      },
-    });
-
     const argumentsBlock = getInterfaceBlock(
-      generated,
+      edgeCaseGeneratedSource,
       'GetDuplicateParameters_get_arguments'
     );
     expect(argumentsBlock).toContain('path_id: string;');
     expect(argumentsBlock).toContain('query_id?: string;');
     expect(argumentsBlock).toContain('header_id?: string;');
     expect(argumentsBlock).toContain("@remarks Duplicated argument name: 'id'");
-    expect(generated).toContain(
-      'readonly get: (args: GetDuplicateParameters_get_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<GetDuplicateParameters_get_response>;'
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly get: (args: GetDuplicateParameters_get_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<CollisionValueResponse>;'
     );
+
+    const warnings = getEdgeCaseWarnings('GetDuplicateParameters');
     expect(warnings).toHaveLength(3);
     expect(warnings).toEqual(
       expect.arrayContaining([
@@ -681,13 +765,9 @@ describe('operation definition generation', () => {
       ])
     );
 
-    const generatedModuleWithDuplicates =
-      await transpileGeneratedSource(generated);
     const sender = vi.fn(async (request: unknown) => request);
     const accessor =
-      generatedModuleWithDuplicates.create_GetDuplicateParameters_accessor(
-        sender
-      );
+      edgeCaseGeneratedModule.create_GetDuplicateParameters_accessor(sender);
 
     await accessor.get({
       path_id: 'route-42',
@@ -705,6 +785,8 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       undefined,
       undefined
@@ -712,65 +794,8 @@ describe('operation definition generation', () => {
   });
 
   it('renames parameters whose normalized names collide and preserves each wire name', async () => {
-    const warnings: string[] = [];
-    const generated = generateAccessorSource({
-      document: {
-        openapi: '3.0.3',
-        info: {
-          title: 'Normalized collision',
-          version: '1.0.0',
-        },
-        paths: {
-          '/normalized-collision': {
-            get: {
-              operationId: 'GetNormalizedCollision',
-              parameters: [
-                {
-                  in: 'query',
-                  name: 'x-api-key',
-                  required: false,
-                  schema: {
-                    type: 'string',
-                  },
-                },
-                {
-                  in: 'header',
-                  name: 'x.api.key',
-                  required: false,
-                  schema: {
-                    type: 'string',
-                  },
-                },
-              ],
-              responses: {
-                '200': {
-                  description: 'OK',
-                  content: {
-                    'application/json': {
-                      schema: {
-                        type: 'object',
-                        required: ['value'],
-                        properties: {
-                          value: {
-                            type: 'string',
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      warningSink: (message) => {
-        warnings.push(message);
-      },
-    });
-
     const argumentsBlock = getInterfaceBlock(
-      generated,
+      edgeCaseGeneratedSource,
       'GetNormalizedCollision_get_arguments'
     );
     expect(argumentsBlock).toContain('query_xApiKey?: string;');
@@ -778,6 +803,8 @@ describe('operation definition generation', () => {
     expect(argumentsBlock).toContain(
       "@remarks Duplicated argument name: 'xApiKey'"
     );
+
+    const warnings = getEdgeCaseWarnings('GetNormalizedCollision');
     expect(warnings).toHaveLength(2);
     expect(warnings).toEqual(
       expect.arrayContaining([
@@ -786,13 +813,9 @@ describe('operation definition generation', () => {
       ])
     );
 
-    const generatedModuleWithNormalizedCollision =
-      await transpileGeneratedSource(generated);
     const sender = vi.fn(async (request: unknown) => request);
     const accessor =
-      generatedModuleWithNormalizedCollision.create_GetNormalizedCollision_accessor(
-        sender
-      );
+      edgeCaseGeneratedModule.create_GetNormalizedCollision_accessor(sender);
 
     await accessor.get({
       query_xApiKey: 'query-key',
@@ -809,6 +832,8 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       undefined,
       undefined
@@ -816,73 +841,8 @@ describe('operation definition generation', () => {
   });
 
   it('does not rename parameters when normalization keeps their names distinct', async () => {
-    const warnings: string[] = [];
-    const generated = generateAccessorSource({
-      document: {
-        openapi: '3.0.3',
-        info: {
-          title: 'Normalized distinct parameters',
-          version: '1.0.0',
-        },
-        paths: {
-          '/normalized-distinct/{user_id}': {
-            get: {
-              operationId: 'GetNormalizedDistinct',
-              parameters: [
-                {
-                  in: 'path',
-                  name: 'user_id',
-                  required: true,
-                  schema: {
-                    type: 'string',
-                  },
-                },
-                {
-                  in: 'query',
-                  name: 'user-id',
-                  required: false,
-                  schema: {
-                    type: 'string',
-                  },
-                },
-                {
-                  in: 'header',
-                  name: 'tenant.id',
-                  required: false,
-                  schema: {
-                    type: 'string',
-                  },
-                },
-              ],
-              responses: {
-                '200': {
-                  description: 'OK',
-                  content: {
-                    'application/json': {
-                      schema: {
-                        type: 'object',
-                        required: ['value'],
-                        properties: {
-                          value: {
-                            type: 'string',
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      warningSink: (message) => {
-        warnings.push(message);
-      },
-    });
-
     const argumentsBlock = getInterfaceBlock(
-      generated,
+      edgeCaseGeneratedSource,
       'GetNormalizedDistinct_get_arguments'
     );
     expect(argumentsBlock).toContain('user_id: string;');
@@ -892,15 +852,11 @@ describe('operation definition generation', () => {
     expect(argumentsBlock).not.toContain('query_userId');
     expect(argumentsBlock).not.toContain('header_tenantId');
     expect(argumentsBlock).not.toContain('@remarks Duplicated argument name');
-    expect(warnings).toEqual([]);
+    expect(getEdgeCaseWarnings('GetNormalizedDistinct')).toEqual([]);
 
-    const generatedModuleWithDistinctParameters =
-      await transpileGeneratedSource(generated);
     const sender = vi.fn(async (request: unknown) => request);
     const accessor =
-      generatedModuleWithDistinctParameters.create_GetNormalizedDistinct_accessor(
-        sender
-      );
+      edgeCaseGeneratedModule.create_GetNormalizedDistinct_accessor(sender);
 
     await accessor.get({
       user_id: 'route-42',
@@ -918,6 +874,8 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       undefined,
       undefined
@@ -925,96 +883,8 @@ describe('operation definition generation', () => {
   });
 
   it('renames duplicated flattened parameter names, keeps wire names, and excludes them from the request body', async () => {
-    const warnings: string[] = [];
-    const generated = generateAccessorSource({
-      document: {
-        openapi: '3.0.3',
-        info: {
-          title: 'Argument collision',
-          version: '1.0.0',
-        },
-        paths: {
-          '/items/{id}': {
-            post: {
-              operationId: 'CreateItem',
-              parameters: [
-                {
-                  in: 'path',
-                  name: 'id',
-                  required: true,
-                  schema: {
-                    type: 'string',
-                  },
-                },
-                {
-                  in: 'query',
-                  name: 'x-api-key',
-                  required: false,
-                  schema: {
-                    type: 'string',
-                  },
-                },
-                {
-                  in: 'header',
-                  name: 'x-api-key',
-                  required: false,
-                  schema: {
-                    type: 'string',
-                  },
-                },
-              ],
-              requestBody: {
-                required: true,
-                description: 'JSON request body.',
-                content: {
-                  'application/json': {
-                    schema: {
-                      type: 'object',
-                      required: ['id', 'xApiKey', 'name'],
-                      properties: {
-                        id: {
-                          type: 'string',
-                        },
-                        xApiKey: {
-                          type: 'string',
-                        },
-                        name: {
-                          type: 'string',
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-              responses: {
-                '200': {
-                  description: 'OK',
-                  content: {
-                    'application/json': {
-                      schema: {
-                        type: 'object',
-                        required: ['value'],
-                        properties: {
-                          value: {
-                            type: 'string',
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      warningSink: (message) => {
-        warnings.push(message);
-      },
-    });
-
     const argumentsBlock = getInterfaceBlock(
-      generated,
+      edgeCaseGeneratedSource,
       'CreateItem_post_arguments'
     );
     expect(argumentsBlock).toContain('path_id: string;');
@@ -1024,9 +894,11 @@ describe('operation definition generation', () => {
     expect(argumentsBlock).toContain(
       "@remarks Duplicated argument name: 'xApiKey'"
     );
-    expect(generated).toContain(
-      'readonly post: (args: CreateItem_post_request_body & CreateItem_post_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<CreateItem_post_response>;'
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly post: (args: CreateCollisionItemRequest & CreateItem_post_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<CollisionValueResponse>;'
     );
+
+    const warnings = getEdgeCaseWarnings('CreateItem');
     expect(warnings).toHaveLength(3);
     expect(warnings).toEqual(
       expect.arrayContaining([
@@ -1036,11 +908,8 @@ describe('operation definition generation', () => {
       ])
     );
 
-    const generatedModuleWithCollisions =
-      await transpileGeneratedSource(generated);
     const sender = vi.fn(async (request: unknown) => request);
-    const accessor =
-      generatedModuleWithCollisions.create_CreateItem_accessor(sender);
+    const accessor = edgeCaseGeneratedModule.create_CreateItem_accessor(sender);
 
     await accessor.post({
       id: 'body-42',
@@ -1066,10 +935,392 @@ describe('operation definition generation', () => {
           xApiKey: 'body-key',
           name: 'alpha',
         },
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       undefined,
       undefined
     );
+  });
+
+  it('uses primitive request bodies directly when no flattened parameters are present', async () => {
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly post: (args: string, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
+    );
+    expect(edgeCaseGeneratedSource).not.toContain(
+      'CreateText_post_request_envelope'
+    );
+
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor = edgeCaseGeneratedModule.create_CreateText_accessor(sender);
+
+    await accessor.post('alpha');
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'CreateText.post',
+        method: 'POST',
+        url: '/text',
+        headers: {
+          'content-type': 'text/plain',
+        },
+        body: 'alpha',
+        responseHeaders: [],
+        wrapResponseBody: false,
+      },
+      undefined,
+      undefined
+    );
+  });
+
+  it('wraps primitive request bodies in an envelope while intersecting flattened parameters', async () => {
+    const requestEnvelopeBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'CreateScopedText_post_request_envelope'
+    );
+    expect(requestEnvelopeBlock).toContain('readonly body: string;');
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly post: (args: CreateScopedText_post_request_envelope & CreateScopedText_post_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
+    );
+
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor =
+      edgeCaseGeneratedModule.create_CreateScopedText_accessor(sender);
+
+    await accessor.post({
+      scope: 'alpha',
+      xTraceId: 'trace-42',
+      body: 'payload',
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'CreateScopedText.post',
+        method: 'POST',
+        url: '/text/alpha',
+        headers: {
+          'x-trace-id': 'trace-42',
+          'content-type': 'text/plain',
+        },
+        body: 'payload',
+        responseHeaders: [],
+        wrapResponseBody: false,
+      },
+      undefined,
+      undefined
+    );
+  });
+
+  it('uses array request bodies directly when no flattened parameters are present', async () => {
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly post: (args: ReadonlyArray<number>, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
+    );
+    expect(edgeCaseGeneratedSource).not.toContain(
+      'CreateNumberList_post_request_envelope'
+    );
+
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor =
+      edgeCaseGeneratedModule.create_CreateNumberList_accessor(sender);
+
+    await accessor.post([1, 2, 3]);
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'CreateNumberList.post',
+        method: 'POST',
+        url: '/number-list',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: [1, 2, 3],
+        responseHeaders: [],
+        wrapResponseBody: false,
+      },
+      undefined,
+      undefined
+    );
+  });
+
+  it('wraps array request bodies in an envelope while intersecting flattened parameters', async () => {
+    const requestEnvelopeBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'UpdateNumbers_put_request_envelope'
+    );
+    expect(requestEnvelopeBlock).toContain(
+      'readonly body: ReadonlyArray<number>;'
+    );
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly put: (args: UpdateNumbers_put_request_envelope & UpdateNumbers_put_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
+    );
+
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor =
+      edgeCaseGeneratedModule.create_UpdateNumbers_accessor(sender);
+
+    await accessor.put({
+      scope: 'global',
+      dryRun: true,
+      body: [1, 2, 3],
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'UpdateNumbers.put',
+        method: 'PUT',
+        url: '/numbers/global?dry-run=true',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: [1, 2, 3],
+        responseHeaders: [],
+        wrapResponseBody: false,
+      },
+      undefined,
+      undefined
+    );
+  });
+
+  it('returns projected response headers when the response body is absent', async () => {
+    const responseHeadersBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'GetToken_get_response_headers'
+    );
+    expect(responseHeadersBlock).toContain('xRequestId?: string;');
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<GetToken_get_response_headers>;'
+    );
+
+    const sender = edgeCaseGeneratedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          get: (name: string) => (name === 'x-request-id' ? 'req-42' : null),
+        },
+        text: async () => '',
+      })),
+    });
+    const accessor = edgeCaseGeneratedModule.create_GetToken_accessor(sender);
+
+    await expect(accessor.get()).resolves.toEqual({
+      xRequestId: 'req-42',
+    });
+  });
+
+  it('returns primitive response bodies directly when response headers are absent', async () => {
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<string>;'
+    );
+    expect(edgeCaseGeneratedSource).not.toContain(
+      'GetPlainMessage_get_response_body'
+    );
+    expect(edgeCaseGeneratedSource).not.toContain(
+      'GetPlainMessage_get_response_headers'
+    );
+
+    const sender = edgeCaseGeneratedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          get: () => null,
+        },
+        text: async () => 'hello',
+      })),
+    });
+    const accessor =
+      edgeCaseGeneratedModule.create_GetPlainMessage_accessor(sender);
+
+    await expect(accessor.get()).resolves.toBe('hello');
+  });
+
+  it('returns array response bodies directly when response headers are absent', async () => {
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ReadonlyArray<number>>;'
+    );
+    expect(edgeCaseGeneratedSource).not.toContain(
+      'GetNumbers_get_response_body'
+    );
+    expect(edgeCaseGeneratedSource).not.toContain(
+      'GetNumbers_get_response_headers'
+    );
+
+    const sender = edgeCaseGeneratedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          get: (name: string) =>
+            name === 'content-type' ? 'application/json' : null,
+        },
+        text: async () => JSON.stringify([1, 2, 3]),
+      })),
+    });
+    const accessor = edgeCaseGeneratedModule.create_GetNumbers_accessor(sender);
+
+    await expect(accessor.get()).resolves.toEqual([1, 2, 3]);
+  });
+
+  it('merges object response bodies with projected response headers', async () => {
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentResponse & GetDocument_get_response_headers>;'
+    );
+
+    const sender = edgeCaseGeneratedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          get: (name: string) =>
+            name === 'content-type'
+              ? 'application/json'
+              : name === 'etag'
+                ? 'etag-42'
+                : null,
+        },
+        text: async () => JSON.stringify({ value: 'alpha' }),
+      })),
+    });
+    const accessor =
+      edgeCaseGeneratedModule.create_GetDocument_accessor(sender);
+
+    await expect(accessor.get()).resolves.toEqual({
+      value: 'alpha',
+      etag: 'etag-42',
+    });
+  });
+
+  it('wraps primitive response bodies when response headers are also projected', async () => {
+    const responseEnvelopeBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'GetMessage_get_response_body'
+    );
+    expect(responseEnvelopeBlock).toContain('readonly body: string;');
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<GetMessage_get_response_body & GetMessage_get_response_headers>;'
+    );
+
+    const sender = edgeCaseGeneratedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          get: (name: string) => (name === 'etag' ? 'etag-99' : null),
+        },
+        text: async () => 'hello',
+      })),
+    });
+    const accessor = edgeCaseGeneratedModule.create_GetMessage_accessor(sender);
+
+    await expect(accessor.get()).resolves.toEqual({
+      body: 'hello',
+      etag: 'etag-99',
+    });
+  });
+
+  it('wraps array response bodies when response headers are also projected', async () => {
+    const responseEnvelopeBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'GetNumberMessage_get_response_body'
+    );
+    expect(responseEnvelopeBlock).toContain(
+      'readonly body: ReadonlyArray<number>;'
+    );
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<GetNumberMessage_get_response_body & GetNumberMessage_get_response_headers>;'
+    );
+
+    const sender = edgeCaseGeneratedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          get: (name: string) =>
+            name === 'content-type'
+              ? 'application/json'
+              : name === 'etag'
+                ? 'etag-100'
+                : null,
+        },
+        text: async () => JSON.stringify([1, 2, 3]),
+      })),
+    });
+    const accessor =
+      edgeCaseGeneratedModule.create_GetNumberMessage_accessor(sender);
+
+    await expect(accessor.get()).resolves.toEqual({
+      body: [1, 2, 3],
+      etag: 'etag-100',
+    });
+  });
+
+  it('renames duplicated response field names and emits warnings for response headers', async () => {
+    const responseHeadersBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'GetResponseCollision_get_response_headers'
+    );
+    expect(responseHeadersBlock).toContain('header_etag?: string;');
+    expect(responseHeadersBlock).toContain('header_xApiKey?: string;');
+    expect(responseHeadersBlock).toContain('header_xApiKey_2?: string;');
+    expect(responseHeadersBlock).toContain(
+      "@remarks Duplicated response field name: 'etag'"
+    );
+    expect(responseHeadersBlock).toContain(
+      "@remarks Duplicated response field name: 'xApiKey'"
+    );
+
+    const warnings = getEdgeCaseWarnings('GetResponseCollision');
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        "Renamed response header 'etag' to 'header_etag' in accessor 'GetResponseCollision' method 'get' because generated response field name 'etag' was duplicated.",
+        "Renamed response header 'x-api-key' to 'header_xApiKey' in accessor 'GetResponseCollision' method 'get' because generated response field name 'xApiKey' was duplicated.",
+        "Renamed response header 'x.api.key' to 'header_xApiKey_2' in accessor 'GetResponseCollision' method 'get' because generated response field name 'xApiKey' was duplicated.",
+      ])
+    );
+
+    const sender = edgeCaseGeneratedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          get: (name: string) =>
+            name === 'content-type'
+              ? 'application/json'
+              : name === 'etag'
+                ? 'header-tag'
+                : name === 'x-api-key'
+                  ? 'query-tag'
+                  : name === 'x.api.key'
+                    ? 'header-tag-2'
+                    : null,
+        },
+        text: async () => JSON.stringify({ etag: 'body-tag' }),
+      })),
+    });
+    const accessor =
+      edgeCaseGeneratedModule.create_GetResponseCollision_accessor(sender);
+
+    await expect(accessor.get()).resolves.toEqual({
+      etag: 'body-tag',
+      header_etag: 'header-tag',
+      header_xApiKey: 'query-tag',
+      header_xApiKey_2: 'header-tag-2',
+    });
   });
 
   it('emits fetch helper options without signal in init', () => {

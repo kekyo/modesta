@@ -307,6 +307,16 @@ describe('xml comments integration', () => {
       'body',
       '/** Request body payload passed to the sender. */'
     );
+    expectMemberDocumentation(
+      requestDescriptorBlock,
+      'responseHeaders',
+      '/** Response header definitions used to project the sender result. */'
+    );
+    expectMemberDocumentation(
+      requestDescriptorBlock,
+      'wrapResponseBody',
+      '/** Indicates that primitive or array response bodies must be exposed through a `body` member when response headers are also defined. */'
+    );
     expect(getInterfaceDocumentation(generatedSource, 'AccessorOptions')).toBe(
       '/** Shared options accepted by generated accessor methods. */'
     );

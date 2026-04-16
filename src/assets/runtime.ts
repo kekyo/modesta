@@ -15,6 +15,24 @@ export interface AccessorRequestDescriptor<TRequestBody> {
   readonly headers: Record<string, string>;
   /** Request body payload passed to the sender. */
   readonly body: TRequestBody | undefined;
+  /** Response header definitions used to project the sender result. */
+  readonly responseHeaders: readonly AccessorResponseHeaderDescriptor[];
+  /** Indicates that primitive or array response bodies must be exposed through a `body` member when response headers are also defined. */
+  readonly wrapResponseBody: boolean;
+}
+
+/**
+ * Response header projection metadata used by generated accessors.
+ */
+export interface AccessorResponseHeaderDescriptor {
+  /** Header name as it appears on the wire. */
+  readonly name: string;
+  /** Property name exposed by the generated return type. */
+  readonly propertyName: string;
+  /** Simplified scalar shape used to parse the HTTP header string value. */
+  readonly valueType: 'string' | 'number' | 'boolean' | 'array' | 'unknown';
+  /** Item scalar shape when `valueType` is `array`. */
+  readonly itemValueType?: 'string' | 'number' | 'boolean' | 'unknown' | undefined;
 }
 
 /** Shared options accepted by generated accessor methods. */
@@ -139,7 +157,7 @@ const modestaSerializeFetchBody = (
 
 const modestaExcludeProperties = (
   value: unknown,
-  propertyNames: string[]
+  propertyNames: readonly string[]
 ) => {
   if (value == null || typeof value !== 'object') {
     return value;
@@ -150,6 +168,86 @@ const modestaExcludeProperties = (
     delete (clonedValue as Record<string, unknown>)[propertyName];
   }
   return clonedValue;
+};
+
+const modestaParseResponseHeaderScalar = (
+  value: string,
+  valueType:
+    | AccessorResponseHeaderDescriptor['valueType']
+    | AccessorResponseHeaderDescriptor['itemValueType']
+) => {
+  switch (valueType) {
+    case 'number':
+      return Number(value);
+    case 'boolean':
+      return value.toLowerCase() === 'true';
+    case 'string':
+    case 'unknown':
+    case 'array':
+    default:
+      return value;
+  }
+};
+
+const modestaParseResponseHeaderValue = (
+  value: string,
+  descriptor: AccessorResponseHeaderDescriptor
+) => {
+  if (descriptor.valueType === 'array') {
+    return value
+      .split(',')
+      .map((entry) =>
+        modestaParseResponseHeaderScalar(
+          entry.trim(),
+          descriptor.itemValueType ?? 'unknown'
+        )
+      );
+  }
+
+  return modestaParseResponseHeaderScalar(value, descriptor.valueType);
+};
+
+const modestaReadResponseHeaders = (
+  response: Response,
+  descriptors: readonly AccessorResponseHeaderDescriptor[]
+) => {
+  const projectedHeaders: Record<string, unknown> = {};
+  for (const descriptor of descriptors) {
+    const headerValue = response.headers.get(descriptor.name);
+    if (headerValue == null) {
+      continue;
+    }
+    projectedHeaders[descriptor.propertyName] = modestaParseResponseHeaderValue(
+      headerValue,
+      descriptor
+    );
+  }
+  return projectedHeaders;
+};
+
+const modestaProjectResponse = (
+  body: unknown,
+  projectedHeaders: Record<string, unknown>,
+  wrapResponseBody: boolean
+) => {
+  if (body == null) {
+    return Object.keys(projectedHeaders).length === 0
+      ? undefined
+      : projectedHeaders;
+  }
+  if (Object.keys(projectedHeaders).length === 0) {
+    return body;
+  }
+  if (wrapResponseBody) {
+    return {
+      body,
+      ...projectedHeaders,
+    };
+  }
+  return {
+    ...(body as Record<string, unknown>),
+    ...projectedHeaders,
+  };
 };
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -200,17 +298,26 @@ export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSe
       );
     }
 
+    const projectedHeaders = modestaReadResponseHeaders(
+      response,
+      request.responseHeaders
+    );
     const responseText = await response.text();
-    if (responseText.length === 0) {
-      return undefined as TResponse;
-    }
+    const responseBody =
+      responseText.length === 0
+        ? undefined
+        : (() => {
+            const responseContentType = response.headers.get('content-type');
+            return responseContentType != null &&
+              modestaJsonMediaTypePattern.test(responseContentType)
+              ? JSON.parse(responseText)
+              : responseText;
+          })();
 
-    const responseContentType = response.headers.get('content-type');
-    return (
-      responseContentType != null &&
-      modestaJsonMediaTypePattern.test(responseContentType)
-      ? JSON.parse(responseText)
-        : responseText
+    return modestaProjectResponse(
+      responseBody,
+      projectedHeaders,
+      request.wrapResponseBody
     ) as TResponse;
   };
 };

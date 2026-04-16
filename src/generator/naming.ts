@@ -23,8 +23,10 @@ import {
   OperationNamingDraft,
   ParameterDefinition,
   RawOperationDefinition,
+  ResponseHeaderDefinition,
 } from './types';
 import {
+  isSchemaObjectLike,
   resolveReferenceObject,
   resolveRequestBody,
   resolveResponse,
@@ -134,6 +136,14 @@ export const buildAccessorGroups = (
             `request body type for ${groupName}.${draft.memberName}`
           )
         : undefined;
+    const requestBodyEnvelopeTypeName =
+      requestBodyTypeName != null
+        ? registerTypeName(
+            context.naming.usedTypeNames,
+            `${typeNamePrefix}_request_envelope`,
+            `request envelope type for ${groupName}.${draft.memberName}`
+          )
+        : undefined;
     const argumentsTypeName = registerTypeName(
       context.naming.usedTypeNames,
       `${typeNamePrefix}_arguments`,
@@ -143,6 +153,33 @@ export const buildAccessorGroups = (
       context.naming.usedTypeNames,
       `${typeNamePrefix}_response`,
       `response type for ${groupName}.${draft.memberName}`
+    );
+    const responseHeadersTypeName = registerTypeName(
+      context.naming.usedTypeNames,
+      `${typeNamePrefix}_response_headers`,
+      `response headers type for ${groupName}.${draft.memberName}`
+    );
+    const responseBodyEnvelopeTypeName = registerTypeName(
+      context.naming.usedTypeNames,
+      `${typeNamePrefix}_response_body`,
+      `response body envelope type for ${groupName}.${draft.memberName}`
+    );
+
+    const resolvedRequestBody =
+      requestBodyTypeName != null
+        ? resolveRequestBody(
+            context,
+            draft.rawOperation.rawOperation,
+            requestBodyTypeName,
+            requestBodyEnvelopeTypeName
+          )
+        : undefined;
+    const resolvedResponse = resolveResponse(
+      context,
+      draft.rawOperation.rawOperation,
+      responseTypeName,
+      responseHeadersTypeName,
+      responseBodyEnvelopeTypeName
     );
 
     const operation: OperationDefinition = {
@@ -160,29 +197,23 @@ export const buildAccessorGroups = (
       pathParametersTypeName: undefined,
       queryParameters: draft.rawOperation.queryParameters,
       queryParametersTypeName: undefined,
-      requestBody:
-        requestBodyTypeName != null
-          ? resolveRequestBody(
-              context,
-              draft.rawOperation.rawOperation,
-              requestBodyTypeName
-            )
-          : undefined,
-      response: resolveResponse(
-        context,
-        draft.rawOperation.rawOperation,
-        responseTypeName
-      ),
+      requestBody: resolvedRequestBody,
+      response: resolvedResponse,
       summary: draft.rawOperation.summary,
     };
     const resolvedOperation = resolveOperationArgumentMembers(
       context,
       operation
     );
-    validateOperationArgumentMembers(context, resolvedOperation);
+    const resolvedResponseOperation = resolveOperationResponseMembers(
+      context,
+      resolvedOperation
+    );
+    validateOperationArgumentMembers(context, resolvedResponseOperation);
+    validateOperationResponseMembers(context, resolvedResponseOperation);
 
     const groupOperations = operationsByGroup.get(groupName) ?? [];
-    groupOperations.push(resolvedOperation);
+    groupOperations.push(resolvedResponseOperation);
     operationsByGroup.set(groupName, groupOperations);
   }
 
@@ -231,7 +262,7 @@ const validateOperationArgumentMembers = (
   if (operation.requestBody != null) {
     for (const propertyName of collectRequestBodyPropertyNames(
       context,
-      operation.requestBody.schema
+      operation
     )) {
       registerMember(
         propertyName,
@@ -241,13 +272,50 @@ const validateOperationArgumentMembers = (
   }
 };
 
+const validateOperationResponseMembers = (
+  context: OpenApiContext,
+  operation: OperationDefinition
+) => {
+  if (operation.response.headers.length === 0) {
+    return;
+  }
+
+  const memberSourceByName = new Map<string, string>();
+  const registerMember = (name: string, source: string) => {
+    const existingSource = memberSourceByName.get(name);
+    if (existingSource != null) {
+      throw new Error(
+        `Generated response member '${name}' in accessor '${operation.groupName}' method '${operation.memberName}' is ambiguous between ${existingSource} and ${source}.`
+      );
+    }
+
+    memberSourceByName.set(name, source);
+  };
+
+  for (const propertyName of collectResponseBodyPropertyNames(
+    context,
+    operation
+  )) {
+    registerMember(
+      propertyName,
+      `response body property '${propertyName}' for ${operation.descriptorOperationName}`
+    );
+  }
+  for (const header of operation.response.headers) {
+    registerMember(
+      header.propertyName,
+      `response header '${header.name}' for ${operation.descriptorOperationName}`
+    );
+  }
+};
+
 const resolveOperationArgumentMembers = (
   context: OpenApiContext,
   operation: OperationDefinition
 ): OperationDefinition => {
   const requestBodyPropertyNames =
     operation.requestBody != null
-      ? collectRequestBodyPropertyNames(context, operation.requestBody.schema)
+      ? collectRequestBodyPropertyNames(context, operation)
       : new Set<string>();
   const duplicateCounts = new Map<string, number>();
   for (const propertyName of requestBodyPropertyNames) {
@@ -297,6 +365,70 @@ const resolveOperationArgumentMembers = (
     headerParameters: operation.headerParameters.map(resolveParameter),
     pathParameters: operation.pathParameters.map(resolveParameter),
     queryParameters: operation.queryParameters.map(resolveParameter),
+  };
+};
+
+const resolveOperationResponseMembers = (
+  context: OpenApiContext,
+  operation: OperationDefinition
+): OperationDefinition => {
+  if (operation.response.headers.length === 0) {
+    return operation;
+  }
+
+  const responseBodyPropertyNames = collectResponseBodyPropertyNames(
+    context,
+    operation
+  );
+  const duplicateCounts = new Map<string, number>();
+  for (const propertyName of responseBodyPropertyNames) {
+    duplicateCounts.set(
+      propertyName,
+      (duplicateCounts.get(propertyName) ?? 0) + 1
+    );
+  }
+  for (const header of operation.response.headers) {
+    duplicateCounts.set(
+      header.originalPropertyName,
+      (duplicateCounts.get(header.originalPropertyName) ?? 0) + 1
+    );
+  }
+
+  const usedPropertyNames = new Set<string>(responseBodyPropertyNames);
+  const resolveHeader = (
+    header: ResponseHeaderDefinition
+  ): ResponseHeaderDefinition => {
+    const originalPropertyName = header.originalPropertyName;
+    const duplicated = (duplicateCounts.get(originalPropertyName) ?? 0) > 1;
+    const preferredPropertyName = duplicated
+      ? `header_${originalPropertyName}`
+      : originalPropertyName;
+    const propertyName = registerUniquePropertyName(
+      usedPropertyNames,
+      preferredPropertyName
+    );
+    if (propertyName !== originalPropertyName) {
+      context.warningSink?.(
+        `Renamed response header '${header.name}' to '${propertyName}' in accessor '${operation.groupName}' method '${operation.memberName}' because generated response field name '${originalPropertyName}' was duplicated.`
+      );
+    }
+
+    return {
+      ...header,
+      duplicatedPropertyName:
+        propertyName !== originalPropertyName
+          ? originalPropertyName
+          : undefined,
+      propertyName,
+    };
+  };
+
+  return {
+    ...operation,
+    response: {
+      ...operation.response,
+      headers: operation.response.headers.map(resolveHeader),
+    },
   };
 };
 
@@ -537,9 +669,37 @@ const registerUniquePropertyName = (
 
 const collectRequestBodyPropertyNames = (
   context: OpenApiContext,
-  schema: JsonRecord
+  operation: OperationDefinition
 ): Set<string> => {
-  return collectSchemaPropertyNames(context, schema, new Set<string>());
+  const requestBody = operation.requestBody;
+  if (requestBody == null) {
+    return new Set<string>();
+  }
+  return requestBody.envelopeTypeName != null &&
+    shouldUseRequestBodyEnvelope(context, operation)
+    ? new Set<string>(['body'])
+    : collectSchemaPropertyNames(
+        context,
+        requestBody.schema,
+        new Set<string>()
+      );
+};
+
+const collectResponseBodyPropertyNames = (
+  context: OpenApiContext,
+  operation: OperationDefinition
+): Set<string> => {
+  if (operation.response.schema == null) {
+    return new Set<string>();
+  }
+
+  return shouldUseResponseBodyEnvelope(context, operation)
+    ? new Set<string>(['body'])
+    : collectSchemaPropertyNames(
+        context,
+        operation.response.schema,
+        new Set<string>()
+      );
 };
 
 const collectSchemaPropertyNames = (
@@ -586,4 +746,26 @@ const collectSchemaPropertyNames = (
   }
 
   return propertyNames;
+};
+
+const shouldUseRequestBodyEnvelope = (
+  context: OpenApiContext,
+  operation: OperationDefinition
+) => {
+  return (
+    operation.requestBody != null &&
+    getOperationParameters(operation).length > 0 &&
+    isSchemaObjectLike(context.document, operation.requestBody.schema) === false
+  );
+};
+
+const shouldUseResponseBodyEnvelope = (
+  context: OpenApiContext,
+  operation: OperationDefinition
+) => {
+  return (
+    operation.response.schema != null &&
+    operation.response.headers.length > 0 &&
+    isSchemaObjectLike(context.document, operation.response.schema) === false
+  );
 };

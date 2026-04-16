@@ -13,6 +13,7 @@ import { pathToFileURL } from 'url';
 import ts from 'typescript';
 import { expect } from 'vitest';
 import { generateAccessorSource } from '../../src/generator';
+import type { GenerateAccessorWarningSink } from '../../src/types';
 
 export interface SwaggerFixtureProject {
   csprojPropertyLines?: string[];
@@ -23,6 +24,7 @@ export interface GenerateAccessorSourceFromProjectOptions {
   artifactName: string | undefined;
   generatedArtifactPath: string | undefined;
   project: SwaggerFixtureProject;
+  warningSink?: GenerateAccessorWarningSink | undefined;
 }
 
 export const runCommand = async (
@@ -284,6 +286,7 @@ export const generateAccessorSourceFromProject = async (
   const generatedSource = generateAccessorSource({
     document: swaggerJson,
     source: 'swagger.json',
+    warningSink: options.warningSink,
   });
   await saveArtifactText(
     options.artifactName,

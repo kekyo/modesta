@@ -3,46 +3,30 @@
 // Under MIT.
 // https://github.com/kekyo/modesta/
 
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { generateAccessorSource } from '../src/generator';
+import { saveArtifactText } from './support/harness';
 import { getTypeAliasStatement } from './support/source-assertions';
 
-const generatedSource = generateAccessorSource({
-  document: {
-    openapi: '3.0.3',
-    info: {
-      title: 'Reference Reuse',
-      version: '1.0.0',
-    },
-    paths: {
-      '/users': {
-        get: {
-          operationId: 'GetUsers',
-          responses: {
-            '200': {
-              description: 'OK',
-              content: {
-                'application/json': {
-                  schema: {
-                    $ref: '#/components/schemas/UserCollection',
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      '/wrapped': {
-        get: {
-          operationId: 'GetWrappedUser',
-          responses: {
-            '200': {
-              description: 'OK',
-              content: {
-                'application/json': {
-                  schema: {
-                    $ref: '#/components/schemas/WrappedUser',
-                  },
+// Swashbuckle does not naturally emit component aliases or single-reference
+// allOf wrappers, so this test intentionally uses a hand-authored document.
+const referenceReuseDocument = {
+  openapi: '3.0.3',
+  info: {
+    title: 'Reference Reuse',
+    version: '1.0.0',
+  },
+  paths: {
+    '/users': {
+      get: {
+        operationId: 'GetUsers',
+        responses: {
+          '200': {
+            description: 'OK',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/UserCollection',
                 },
               },
             },
@@ -50,59 +34,94 @@ const generatedSource = generateAccessorSource({
         },
       },
     },
-    components: {
-      schemas: {
-        User: {
-          type: 'object',
-          required: ['id', 'name'],
-          properties: {
-            id: {
-              type: 'string',
-            },
-            name: {
-              type: 'string',
-            },
-          },
-        },
-        UserAlias: {
-          $ref: '#/components/schemas/User',
-        },
-        UserCollection: {
-          type: 'array',
-          items: {
-            $ref: '#/components/schemas/User',
-          },
-        },
-        WrappedUserAlias: {
-          allOf: [
-            {
-              $ref: '#/components/schemas/User',
-            },
-          ],
-        },
-        WrappedUser: {
-          allOf: [
-            {
-              $ref: '#/components/schemas/User',
-            },
-            {
-              type: 'object',
-              required: ['role'],
-              properties: {
-                role: {
-                  type: 'string',
+    '/wrapped': {
+      get: {
+        operationId: 'GetWrappedUser',
+        responses: {
+          '200': {
+            description: 'OK',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/WrappedUser',
                 },
               },
             },
-          ],
+          },
         },
       },
     },
   },
-  source: 'swagger.json',
-});
+  components: {
+    schemas: {
+      User: {
+        type: 'object',
+        required: ['id', 'name'],
+        properties: {
+          id: {
+            type: 'string',
+          },
+          name: {
+            type: 'string',
+          },
+        },
+      },
+      UserAlias: {
+        $ref: '#/components/schemas/User',
+      },
+      UserCollection: {
+        type: 'array',
+        items: {
+          $ref: '#/components/schemas/User',
+        },
+      },
+      WrappedUserAlias: {
+        allOf: [
+          {
+            $ref: '#/components/schemas/User',
+          },
+        ],
+      },
+      WrappedUser: {
+        allOf: [
+          {
+            $ref: '#/components/schemas/User',
+          },
+          {
+            type: 'object',
+            required: ['role'],
+            properties: {
+              role: {
+                type: 'string',
+              },
+            },
+          },
+        ],
+      },
+    },
+  },
+};
 
 describe('reference reuse generation', () => {
+  let generatedSource = '';
+
+  beforeAll(async () => {
+    generatedSource = generateAccessorSource({
+      document: referenceReuseDocument,
+      source: 'swagger.json',
+    });
+    await saveArtifactText(
+      'reference-reuse',
+      'swagger/reference-reuse.json',
+      JSON.stringify(referenceReuseDocument, null, 2)
+    );
+    await saveArtifactText(
+      'reference-reuse',
+      'generated/reference-reuse.ts',
+      generatedSource
+    );
+  });
+
   it('reuses component aliases instead of expanding them inline', () => {
     expect(getTypeAliasStatement(generatedSource, 'UserAlias')).toBe(
       'export type UserAlias = User;'
@@ -111,7 +130,7 @@ describe('reference reuse generation', () => {
 
   it('reuses shared schema references inside component array items', () => {
     expect(getTypeAliasStatement(generatedSource, 'UserCollection')).toBe(
-      'export type UserCollection = Array<User>;'
+      'export type UserCollection = ReadonlyArray<User>;'
     );
   });
 

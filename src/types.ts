@@ -15,6 +15,11 @@ export type JsonRecord = Record<string, unknown>;
 export type OpenApiSource = string | URL;
 
 /**
+ * Callback used to receive non-fatal generation warnings.
+ */
+export type GenerateAccessorWarningSink = (message: string) => void;
+
+/**
  * Options for loading an OpenAPI document from a file path or URL and generating
  * TypeScript accessor source code.
  */
@@ -32,6 +37,11 @@ export interface GenerateAccessorSourceFromFileOptions {
    * @default false
    */
   insecure?: boolean | undefined;
+  /**
+   * Callback invoked for non-fatal generation warnings such as renamed
+   * argument members.
+   */
+  warningSink?: GenerateAccessorWarningSink | undefined;
 }
 
 /**
@@ -50,4 +60,9 @@ export interface GenerateAccessorSourceOptions {
    * include source metadata in generated output comments.
    */
   source?: OpenApiSource | undefined;
+  /**
+   * Callback invoked for non-fatal generation warnings such as renamed
+   * argument members.
+   */
+  warningSink?: GenerateAccessorWarningSink | undefined;
 }

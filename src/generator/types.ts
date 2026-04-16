@@ -22,7 +22,19 @@ export interface SchemaDefinition {
 export interface ParameterDefinition {
   description: string | undefined;
   location: 'path' | 'query' | 'header';
+  duplicatedPropertyName: string | undefined;
   name: string;
+  originalPropertyName: string;
+  propertyName: string;
+  required: boolean;
+  schema: JsonRecord;
+}
+
+export interface ResponseHeaderDefinition {
+  description: string | undefined;
+  duplicatedPropertyName: string | undefined;
+  name: string;
+  originalPropertyName: string;
   propertyName: string;
   required: boolean;
   schema: JsonRecord;
@@ -30,6 +42,7 @@ export interface ParameterDefinition {
 
 export interface RequestBodyDefinition {
   contentType: string | undefined;
+  envelopeTypeName: string | undefined;
   parameterDescription: string | undefined;
   required: boolean;
   schema: JsonRecord;
@@ -39,7 +52,10 @@ export interface RequestBodyDefinition {
 
 export interface ResponseDefinition {
   accept: string | undefined;
+  bodyEnvelopeTypeName: string | undefined;
   description: string | undefined;
+  headers: readonly ResponseHeaderDefinition[];
+  headersTypeName: string | undefined;
   schema: JsonRecord | undefined;
   statusCode: string;
   typeName: string;
@@ -103,4 +119,5 @@ export interface OpenApiContext {
   componentSchemas: JsonRecord;
   document: JsonRecord;
   naming: NamingContext;
+  warningSink: ((message: string) => void) | undefined;
 }

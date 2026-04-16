@@ -10,10 +10,16 @@ import {
   OpenApiContext,
   OperationDefinition,
   ParameterDefinition,
+  RequestBodyDefinition,
   ResponseDefinition,
+  ResponseHeaderDefinition,
   SchemaDefinition,
 } from './types';
-import { resolveReferenceObject, resolveSchemaObject } from './resolve';
+import {
+  isSchemaObjectLike,
+  resolveReferenceObject,
+  resolveSchemaObject,
+} from './resolve';
 import {
   asArray,
   asRecord,
@@ -91,13 +97,19 @@ export const renderApiDefinition = (
 
   for (const accessorGroup of api.accessorGroups) {
     for (const operation of accessorGroup.operations) {
-      push(renderOperationDefinition(context, operation));
-      push();
+      const renderedOperationDefinition = renderOperationDefinition(
+        context,
+        operation
+      );
+      if (renderedOperationDefinition.length > 0) {
+        push(renderedOperationDefinition);
+        push();
+      }
     }
 
-    push(renderAccessorInterfaces(accessorGroup));
+    push(renderAccessorInterfaces(context, accessorGroup));
     push();
-    push(renderAccessorFactory(accessorGroup));
+    push(renderAccessorFactory(context, accessorGroup));
     push();
   }
 
@@ -108,10 +120,12 @@ const renderNamedSchemaDefinition = (
   context: OpenApiContext,
   schemaDefinition: SchemaDefinition
 ) => {
-  const schema = resolveSchemaObject(
-    context.document,
-    asRecord(context.componentSchemas[schemaDefinition.rawName])
-  );
+  const schema = asRecord(context.componentSchemas[schemaDefinition.rawName]);
+  if (schema == null) {
+    throw new Error(
+      `Could not resolve schema '${schemaDefinition.rawName}' for rendering.`
+    );
+  }
   return renderNamedTypeDefinition(
     context,
     schemaDefinition.typeName,
@@ -126,33 +140,10 @@ const renderOperationDefinition = (
 ) => {
   const sections: string[] = [];
 
-  if (operation.queryParameters.length > 0) {
-    sections.push(
-      renderParameterGroupDefinition(
-        context,
-        operation.queryParametersTypeName ??
-          fail(
-            `Missing query parameter type name for ${operation.namingSource}.`
-          ),
-        'Query parameters definition.',
-        operation.queryParameters
-      )
-    );
-  }
-  if (operation.headerParameters.length > 0) {
-    sections.push(
-      renderParameterGroupDefinition(
-        context,
-        operation.headerParametersTypeName ??
-          fail(
-            `Missing header parameter type name for ${operation.namingSource}.`
-          ),
-        'Header parameters definition.',
-        operation.headerParameters
-      )
-    );
-  }
-  if (operation.requestBody != null) {
+  if (
+    operation.requestBody != null &&
+    shouldRenderOperationSchemaDefinition(context, operation.requestBody.schema)
+  ) {
     sections.push(
       renderNamedTypeDefinition(
         context,
@@ -162,107 +153,159 @@ const renderOperationDefinition = (
       )
     );
   }
+  const renderedRequestBodyEnvelopeDefinition =
+    renderRequestBodyEnvelopeDefinition(context, operation);
+  if (renderedRequestBodyEnvelopeDefinition != null) {
+    sections.push(renderedRequestBodyEnvelopeDefinition);
+  }
 
   const argumentMembers: string[] = [];
-  if (operation.pathParameters.length > 0) {
-    for (const parameter of operation.pathParameters) {
-      argumentMembers.push(
-        renderInterfaceMember(
-          parameter.propertyName,
-          renderTypeExpression(context, parameter.schema, 1),
-          parameter.required === false,
-          parameter.description
-        )
-      );
-    }
-  }
-  if (operation.queryParameters.length > 0) {
+  for (const parameter of getOperationParameters(operation)) {
     argumentMembers.push(
       renderInterfaceMember(
-        'queryParameters',
-        operation.queryParametersTypeName ??
-          fail(
-            `Missing query parameter type name for ${operation.namingSource}.`
-          ),
-        operation.queryParameters.some((parameter) => parameter.required) ===
-          false,
-        'Query parameter values.'
-      )
-    );
-  }
-  if (operation.headerParameters.length > 0) {
-    argumentMembers.push(
-      renderInterfaceMember(
-        'headerParameters',
-        operation.headerParametersTypeName ??
-          fail(
-            `Missing header parameter type name for ${operation.namingSource}.`
-          ),
-        operation.headerParameters.some((parameter) => parameter.required) ===
-          false,
-        'Header parameter values.'
-      )
-    );
-  }
-  if (operation.requestBody != null) {
-    argumentMembers.push(
-      renderInterfaceMember(
-        'body',
-        operation.requestBody.typeName,
-        operation.requestBody.required === false,
-        operation.requestBody.parameterDescription ?? 'JSON request body.'
+        parameter.propertyName,
+        renderTypeExpression(context, parameter.schema, 1),
+        parameter.required === false,
+        parameter.description,
+        true,
+        parameter.duplicatedPropertyName != null
+          ? `Duplicated argument name: '${parameter.duplicatedPropertyName}'`
+          : undefined
       )
     );
   }
 
-  sections.push(
-    renderInterfaceDefinition(
-      operation.argumentsTypeName,
-      'Endpoint argument group.',
-      argumentMembers
-    )
-  );
+  if (argumentMembers.length > 0) {
+    sections.push(
+      renderInterfaceDefinition(
+        operation.argumentsTypeName,
+        'Flattened endpoint parameter arguments.',
+        argumentMembers
+      )
+    );
+  }
 
-  sections.push(renderResponseDefinition(context, operation.response));
+  for (const renderedResponseDefinition of renderResponseDefinitions(
+    context,
+    operation.response
+  )) {
+    sections.push(renderedResponseDefinition);
+  }
 
   return sections.join('\n\n');
 };
 
-const renderParameterGroupDefinition = (
+const renderRequestBodyEnvelopeDefinition = (
   context: OpenApiContext,
-  typeName: string,
-  description: string,
-  parameters: ParameterDefinition[]
+  operation: OperationDefinition
 ) => {
-  const members = parameters.map((parameter) =>
-    renderInterfaceMember(
-      parameter.propertyName,
-      renderTypeExpression(context, parameter.schema, 1),
-      parameter.required === false,
-      parameter.description
-    )
-  );
+  const requestBody = operation.requestBody;
+  if (
+    requestBody == null ||
+    shouldUseRequestBodyEnvelope(context, operation) === false
+  ) {
+    return undefined;
+  }
 
-  return renderInterfaceDefinition(typeName, description, members);
+  return renderInterfaceDefinition(
+    requestBody.envelopeTypeName ??
+      fail(`Missing request envelope type for ${requestBody.typeName}.`),
+    'Request body envelope used when the payload cannot be flattened into top-level arguments.',
+    [
+      renderInterfaceMember(
+        'body',
+        getOperationRequestBodyTypeExpression(context, requestBody),
+        requestBody.required === false,
+        requestBody.parameterDescription
+      ),
+    ]
+  );
 };
 
-const renderResponseDefinition = (
+const renderResponseDefinitions = (
   context: OpenApiContext,
   response: ResponseDefinition
 ) => {
-  const description = getResponseDocumentationDescription(response);
-  if (response.schema == null) {
-    return [
-      renderDocumentationComment(description),
-      `export type ${response.typeName} = void;`,
-    ].join('\n');
+  const sections: string[] = [];
+
+  if (
+    response.schema != null &&
+    shouldRenderOperationSchemaDefinition(context, response.schema)
+  ) {
+    sections.push(
+      renderNamedTypeDefinition(
+        context,
+        response.typeName,
+        response.schema,
+        getResponseDocumentationDescription(response)
+      )
+    );
   }
 
-  return renderNamedTypeDefinition(
+  const renderedResponseHeadersDefinition = renderResponseHeadersDefinition(
     context,
-    response.typeName,
-    response.schema,
-    description
+    response
+  );
+  if (renderedResponseHeadersDefinition != null) {
+    sections.push(renderedResponseHeadersDefinition);
+  }
+
+  const renderedResponseBodyEnvelopeDefinition =
+    renderResponseBodyEnvelopeDefinition(context, response);
+  if (renderedResponseBodyEnvelopeDefinition != null) {
+    sections.push(renderedResponseBodyEnvelopeDefinition);
+  }
+
+  return sections;
+};
+
+const renderResponseHeadersDefinition = (
+  context: OpenApiContext,
+  response: ResponseDefinition
+) => {
+  if (response.headers.length === 0) {
+    return undefined;
+  }
+
+  return renderInterfaceDefinition(
+    response.headersTypeName ??
+      fail(`Missing response headers type for ${response.typeName}.`),
+    `Response header values projected from HTTP ${response.statusCode}.`,
+    response.headers.map((header) =>
+      renderInterfaceMember(
+        header.propertyName,
+        renderTypeExpression(context, header.schema, 1),
+        header.required === false,
+        header.description,
+        true,
+        header.duplicatedPropertyName != null
+          ? `Duplicated response field name: '${header.duplicatedPropertyName}'`
+          : undefined
+      )
+    )
+  );
+};
+
+const renderResponseBodyEnvelopeDefinition = (
+  context: OpenApiContext,
+  response: ResponseDefinition
+) => {
+  if (shouldUseResponseBodyEnvelope(context, response) === false) {
+    return undefined;
+  }
+
+  return renderInterfaceDefinition(
+    response.bodyEnvelopeTypeName ??
+      fail(`Missing response body envelope type for ${response.typeName}.`),
+    'Response body envelope used when primitive or array payloads are combined with response headers.',
+    [
+      renderInterfaceMember(
+        'body',
+        getOperationResponseBodyValueTypeExpression(context, response),
+        false,
+        getResponseDocumentationDescription(response)
+      ),
+    ]
   );
 };
 
@@ -270,34 +313,39 @@ const getAccessorWithContextInterfaceName = (interfaceName: string) =>
   `${interfaceName}_with_context`;
 
 const renderAccessorInterface = (
+  context: OpenApiContext,
   accessorGroup: AccessorGroupDefinition,
   withContext: boolean
 ) => {
   const members = accessorGroup.operations.map((operation) => {
     const argumentMode = getOperationArgumentMode(operation);
+    const argumentTypeExpression = getOperationArgumentTypeExpression(
+      context,
+      operation
+    );
     const optionsType = withContext
       ? 'AccessorOptionsWithContext<TAccessorContext>'
       : 'AccessorOptionsWithoutContext';
     const optionsArgument = withContext
       ? `options: ${optionsType}`
       : `options?: ${optionsType} | undefined`;
+    const responseTypeExpression = getOperationResponseTypeExpression(
+      context,
+      operation.response
+    );
     const signature =
       argumentMode === 'none'
-        ? `(${optionsArgument}) => Promise<${getOperationResponseTypeExpression(operation.response)}>`
+        ? `(${optionsArgument}) => Promise<${responseTypeExpression}>`
         : `(${[
             argumentMode === 'required'
-              ? `args: ${operation.argumentsTypeName}`
-              : `args?: ${operation.argumentsTypeName} | undefined`,
+              ? `args: ${argumentTypeExpression ?? fail(`Missing argument type for ${operation.namingSource}.`)}`
+              : `args?: ${argumentTypeExpression ?? fail(`Missing argument type for ${operation.namingSource}.`)} | undefined`,
             optionsArgument,
-          ].join(
-            ', '
-          )}) => Promise<${getOperationResponseTypeExpression(operation.response)}>`;
+          ].join(', ')}) => Promise<${responseTypeExpression}>`;
     const argumentDescription =
       argumentMode === 'none'
         ? undefined
-        : argumentMode === 'required'
-          ? `Arguments for ${operation.method} ${operation.path}.`
-          : `Optional arguments for ${operation.method} ${operation.path}.`;
+        : getOperationArgumentDescription(context, operation);
     return [
       renderOperationDocumentationComment(
         operation.summary,
@@ -320,17 +368,31 @@ const renderAccessorInterface = (
     withContext
       ? `${accessorGroup.interfaceName} accessor definition that requires per-call context values.`
       : `${accessorGroup.interfaceName} accessor definition.`,
-    members
+    members,
+    withContext
+      ? [
+          {
+            description: 'Per-call context value type passed to the sender.',
+            name: 'TAccessorContext',
+          },
+        ]
+      : undefined
   );
 };
 
-const renderAccessorInterfaces = (accessorGroup: AccessorGroupDefinition) =>
+const renderAccessorInterfaces = (
+  context: OpenApiContext,
+  accessorGroup: AccessorGroupDefinition
+) =>
   [
-    renderAccessorInterface(accessorGroup, false),
-    renderAccessorInterface(accessorGroup, true),
+    renderAccessorInterface(context, accessorGroup, false),
+    renderAccessorInterface(context, accessorGroup, true),
   ].join('\n\n');
 
-const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
+const renderAccessorFactory = (
+  context: OpenApiContext,
+  accessorGroup: AccessorGroupDefinition
+) => {
   const lines: string[] = [];
   const push = (value = '') => {
     lines.push(value);
@@ -412,9 +474,17 @@ const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
         : argumentMode === 'required'
           ? 'args, options'
           : 'args, options';
+    const responseTypeExpression = getOperationResponseTypeExpression(
+      context,
+      operation.response
+    );
+    const requestBodyTypeExpression =
+      operation.requestBody != null
+        ? getOperationRequestBodyTypeExpression(context, operation.requestBody)
+        : 'undefined';
 
     push(
-      `    ${renderPropertyName(operation.memberName)}: async (${argumentToken}) => sender<${getOperationResponseTypeExpression(operation.response)}, ${operation.requestBody?.typeName ?? 'undefined'}>({`
+      `    ${renderPropertyName(operation.memberName)}: async (${argumentToken}) => sender<${responseTypeExpression}, ${requestBodyTypeExpression}>({`
     );
     push(
       `      operationName: ${renderLiteral(operation.descriptorOperationName)},`
@@ -423,19 +493,40 @@ const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
     push(
       `      url: modestaBuildUrl(${[
         renderLiteral(operation.path),
-        renderPathParameterArgumentObject(operation),
-        operation.queryParameters.length > 0
-          ? argumentMode === 'optional'
-            ? 'args?.queryParameters ?? {}'
-            : 'args.queryParameters ?? {}'
-          : '{}',
+        renderParameterArgumentObject(
+          operation.pathParameters,
+          argumentMode === 'optional'
+        ),
+        renderParameterArgumentObject(
+          operation.queryParameters,
+          argumentMode === 'optional'
+        ),
       ].join(', ')}),`
     );
     push(
-      `      headers: modestaBuildHeaders(${operation.headerParameters.length > 0 ? (argumentMode === 'optional' ? 'args?.headerParameters ?? {}' : 'args.headerParameters ?? {}') : '{}'}, ${operation.requestBody?.contentType != null ? renderLiteral(operation.requestBody.contentType) : 'undefined'}, ${operation.response.accept != null ? renderLiteral(operation.response.accept) : 'undefined'}),`
+      `      headers: modestaBuildHeaders(${renderParameterArgumentObject(
+        operation.headerParameters,
+        argumentMode === 'optional'
+      )}, ${operation.requestBody?.contentType != null ? renderLiteral(operation.requestBody.contentType) : 'undefined'}, ${operation.response.accept != null ? renderLiteral(operation.response.accept) : 'undefined'}),`
     );
     push(
-      `      body: ${operation.requestBody != null ? (argumentMode === 'optional' ? 'args?.body' : 'args.body') : 'undefined'},`
+      `      body: ${renderRequestBodyArgumentExpression(
+        context,
+        operation,
+        argumentMode === 'optional'
+      )},`
+    );
+    push(
+      `      responseHeaders: ${renderResponseHeaderDescriptorArray(
+        context,
+        operation.response.headers
+      )},`
+    );
+    push(
+      `      wrapResponseBody: ${shouldUseResponseBodyEnvelope(
+        context,
+        operation.response
+      )},`
     );
     push('    }, interfaceContext, options),');
   }
@@ -453,7 +544,18 @@ const renderNamedTypeDefinition = (
   schema: JsonRecord,
   description: string | undefined
 ) => {
-  const flattened = tryFlattenObjectSchema(context, schema, new Set<string>());
+  const referenceTypeExpression = getReferenceTypeExpression(context, schema);
+  if (referenceTypeExpression != null) {
+    return [
+      renderDocumentationComment(description),
+      `export type ${typeName} = ${referenceTypeExpression};`,
+    ].join('\n');
+  }
+
+  const flattened =
+    shouldPreserveAllOfReferences(schema) === false
+      ? tryFlattenObjectSchema(context, schema, new Set<string>())
+      : undefined;
   if (flattened != null) {
     const members = flattened.properties.map((property) =>
       renderInterfaceMember(
@@ -509,11 +611,14 @@ const renderInterfaceMember = (
   type: string,
   optional: boolean,
   description: string | undefined,
-  readonly = true
+  readonly = true,
+  remarks: string | undefined = undefined
 ) => {
   const lines: string[] = [];
-  if (description != null) {
-    lines.push(indent(renderDocumentationComment(description), 1));
+  if (description != null || remarks != null) {
+    lines.push(
+      indent(renderDocumentationCommentWithRemarks(description, remarks), 1)
+    );
   }
   lines.push(
     `  ${readonly ? 'readonly ' : ''}${renderPropertyName(name)}${optional ? '?' : ''}: ${type};`
@@ -610,18 +715,52 @@ const renderTaggedDocumentationComment = (
   return lines.join('\n');
 };
 
-const renderPathParameterArgumentObject = (operation: OperationDefinition) => {
-  if (operation.pathParameters.length === 0) {
+const renderParameterArgumentObject = (
+  parameters: ParameterDefinition[],
+  optionalArguments: boolean
+) => {
+  if (parameters.length === 0) {
     return '{}';
   }
 
   return [
     '{',
-    ...operation.pathParameters.map(
+    ...parameters.map(
       (parameter) =>
-        `  ${renderPropertyName(parameter.propertyName)}: args[${renderLiteral(parameter.propertyName)}],`
+        `  ${renderPropertyName(parameter.name)}: ${optionalArguments ? `args?.[${renderLiteral(parameter.propertyName)}]` : `args[${renderLiteral(parameter.propertyName)}]`},`
     ),
     '}',
+  ].join('\n');
+};
+
+const renderResponseHeaderDescriptorArray = (
+  context: OpenApiContext,
+  headers: readonly ResponseHeaderDefinition[]
+) => {
+  if (headers.length === 0) {
+    return '[]';
+  }
+
+  return [
+    '[',
+    ...headers.map((header) => {
+      const descriptor = getResponseHeaderValueDescriptor(
+        context,
+        header.schema
+      );
+      const properties = [
+        `name: ${renderLiteral(header.name)}`,
+        `propertyName: ${renderLiteral(header.propertyName)}`,
+        `valueType: ${renderLiteral(descriptor.valueType)}`,
+      ];
+      if (descriptor.itemValueType != null) {
+        properties.push(
+          `itemValueType: ${renderLiteral(descriptor.itemValueType)}`
+        );
+      }
+      return `  { ${properties.join(', ')} },`;
+    }),
+    ']',
   ].join('\n');
 };
 
@@ -669,29 +808,314 @@ const renderOperationDocumentationComment = (
   return lines.join('\n');
 };
 
+const renderDocumentationCommentWithRemarks = (
+  description: string | undefined,
+  remarks: string | undefined
+) => {
+  if (remarks == null) {
+    return renderDocumentationComment(description);
+  }
+
+  const lines = ['/**'];
+  if (description != null) {
+    lines.push(
+      ...normalizeDocumentationLines(description, '').map(
+        (line) => ` * ${line}`
+      )
+    );
+  }
+  appendTaggedDocumentationLines(lines, 'remarks', '', remarks);
+  lines.push(' */');
+  return lines.join('\n');
+};
+
 const getResponseDocumentationDescription = (response: ResponseDefinition) =>
   response.description ?? `Response type for HTTP ${response.statusCode}.`;
 
 const getOperationArgumentMode = (operation: OperationDefinition) => {
   const hasArguments =
-    operation.pathParameters.length > 0 ||
-    operation.queryParameters.length > 0 ||
-    operation.headerParameters.length > 0 ||
+    getOperationParameters(operation).length > 0 ||
     operation.requestBody != null;
   if (hasArguments === false) {
     return 'none' as const;
   }
 
   const requiresArguments =
-    operation.pathParameters.some((parameter) => parameter.required) ||
-    operation.queryParameters.some((parameter) => parameter.required) ||
-    operation.headerParameters.some((parameter) => parameter.required) ||
+    getOperationParameters(operation).some((parameter) => parameter.required) ||
     (operation.requestBody?.required ?? false);
   return requiresArguments ? ('required' as const) : ('optional' as const);
 };
 
-const getOperationResponseTypeExpression = (response: ResponseDefinition) =>
-  response.schema == null ? 'void' : response.typeName;
+const getOperationArgumentTypeExpression = (
+  context: OpenApiContext,
+  operation: OperationDefinition
+) => {
+  const parameterCount = getOperationParameters(operation).length;
+  if (operation.requestBody == null) {
+    return parameterCount > 0 ? operation.argumentsTypeName : undefined;
+  }
+
+  const requestBodyTypeExpression = getOperationRequestArgumentTypeExpression(
+    context,
+    operation
+  );
+  if (parameterCount === 0) {
+    return requestBodyTypeExpression;
+  }
+
+  return `${requestBodyTypeExpression} & ${operation.argumentsTypeName}`;
+};
+
+const getOperationArgumentDescription = (
+  context: OpenApiContext,
+  operation: OperationDefinition
+) => {
+  const hasParameters = getOperationParameters(operation).length > 0;
+  const baseDescription =
+    getOperationArgumentMode(operation) === 'required'
+      ? `Arguments for ${operation.method} ${operation.path}.`
+      : `Optional arguments for ${operation.method} ${operation.path}.`;
+  if (operation.requestBody == null) {
+    return baseDescription;
+  }
+
+  const lines = [baseDescription];
+  const wrappedRequestBody = shouldUseRequestBodyEnvelope(context, operation);
+  lines.push(
+    hasParameters
+      ? wrappedRequestBody
+        ? 'Request body payload is passed via args.body, and flattened path/query/header parameters are passed at the top level.'
+        : 'Request body fields and flattened path/query/header parameters are passed at the top level.'
+      : wrappedRequestBody
+        ? 'Request body payload is passed via args.body.'
+        : 'Request body payload is passed directly as args.'
+  );
+  if (operation.requestBody.parameterDescription != null) {
+    lines.push(`Request body: ${operation.requestBody.parameterDescription}`);
+  }
+  return lines.join('\n');
+};
+
+const isSimpleOperationTypeExpression = (typeExpression: string) => {
+  return (
+    typeExpression.includes('\n') === false &&
+    typeExpression.includes('{') === false &&
+    typeExpression.includes('}') === false
+  );
+};
+
+const getOperationSchemaTypeExpression = (
+  context: OpenApiContext,
+  schema: JsonRecord,
+  typeName: string
+) => {
+  const typeExpression = renderTypeExpression(context, schema, 0);
+  return isSimpleOperationTypeExpression(typeExpression)
+    ? typeExpression
+    : typeName;
+};
+
+const shouldRenderOperationSchemaDefinition = (
+  context: OpenApiContext,
+  schema: JsonRecord
+) => {
+  return (
+    isSimpleOperationTypeExpression(
+      renderTypeExpression(context, schema, 0)
+    ) === false
+  );
+};
+
+const shouldUseRequestBodyEnvelope = (
+  context: OpenApiContext,
+  operation: OperationDefinition
+) => {
+  return (
+    operation.requestBody != null &&
+    getOperationParameters(operation).length > 0 &&
+    isSchemaObjectLike(context.document, operation.requestBody.schema) === false
+  );
+};
+
+const shouldUseResponseBodyEnvelope = (
+  context: OpenApiContext,
+  response: ResponseDefinition
+) => {
+  return (
+    response.schema != null &&
+    response.headers.length > 0 &&
+    isSchemaObjectLike(context.document, response.schema) === false
+  );
+};
+
+const getOperationRequestBodyTypeExpression = (
+  context: OpenApiContext,
+  requestBody: RequestBodyDefinition
+) => {
+  return getOperationSchemaTypeExpression(
+    context,
+    requestBody.schema,
+    requestBody.typeName
+  );
+};
+
+const getOperationRequestArgumentTypeExpression = (
+  context: OpenApiContext,
+  operation: OperationDefinition
+) => {
+  const requestBody =
+    operation.requestBody ??
+    fail(`Missing request body for ${operation.namingSource}.`);
+  return shouldUseRequestBodyEnvelope(context, operation)
+    ? (requestBody.envelopeTypeName ??
+        fail(`Missing request envelope type for ${requestBody.typeName}.`))
+    : getOperationRequestBodyTypeExpression(context, requestBody);
+};
+
+const getOperationResponseBodyValueTypeExpression = (
+  context: OpenApiContext,
+  response: ResponseDefinition
+) => {
+  return response.schema == null
+    ? 'void'
+    : getOperationSchemaTypeExpression(
+        context,
+        response.schema,
+        response.typeName
+      );
+};
+
+const getOperationResponseBodyTypeExpression = (
+  context: OpenApiContext,
+  response: ResponseDefinition
+) => {
+  if (response.schema == null) {
+    return undefined;
+  }
+
+  return shouldUseResponseBodyEnvelope(context, response)
+    ? (response.bodyEnvelopeTypeName ??
+        fail(`Missing response body envelope type for ${response.typeName}.`))
+    : getOperationResponseBodyValueTypeExpression(context, response);
+};
+
+const getOperationResponseHeadersTypeExpression = (
+  response: ResponseDefinition
+) => {
+  return response.headers.length > 0
+    ? (response.headersTypeName ??
+        fail(`Missing response headers type for ${response.typeName}.`))
+    : undefined;
+};
+
+const getOperationResponseTypeExpression = (
+  context: OpenApiContext,
+  response: ResponseDefinition
+) => {
+  const responseBodyTypeExpression = getOperationResponseBodyTypeExpression(
+    context,
+    response
+  );
+  const responseHeadersTypeExpression =
+    getOperationResponseHeadersTypeExpression(response);
+
+  if (
+    responseBodyTypeExpression == null &&
+    responseHeadersTypeExpression == null
+  ) {
+    return 'void';
+  }
+  if (responseBodyTypeExpression == null) {
+    return responseHeadersTypeExpression!;
+  }
+  if (responseHeadersTypeExpression == null) {
+    return responseBodyTypeExpression;
+  }
+  return `${responseBodyTypeExpression} & ${responseHeadersTypeExpression}`;
+};
+
+const getReferenceTypeExpression = (
+  context: OpenApiContext,
+  schema: JsonRecord
+) => {
+  const directReference = getDirectReference(schema);
+  if (directReference != null && isReferenceWrapperSchema(schema)) {
+    return resolveReferenceTypeName(context, directReference);
+  }
+
+  const allOfReference = getSingleReferenceFromAllOf(schema);
+  if (allOfReference != null && isAllOfReferenceWrapperSchema(schema)) {
+    return resolveReferenceTypeName(context, allOfReference);
+  }
+
+  return undefined;
+};
+
+const shouldPreserveAllOfReferences = (schema: JsonRecord) => {
+  const allOf = asArray(schema.allOf);
+  if (allOf == null) {
+    return false;
+  }
+
+  return allOf.some((entry) => {
+    const entryRecord = asRecord(entry);
+    return (
+      entryRecord != null &&
+      (isReferenceWrapperSchema(entryRecord) ||
+        isAllOfReferenceWrapperSchema(entryRecord))
+    );
+  });
+};
+
+const getDirectAllOfObjectShape = (
+  schema: JsonRecord
+): JsonRecord | undefined => {
+  const properties = getRecord(schema, 'properties');
+  if (properties == null && schema.additionalProperties == null) {
+    return undefined;
+  }
+
+  const directShape: JsonRecord = {
+    additionalProperties: schema.additionalProperties,
+    properties,
+  };
+  const required = asArray(schema.required);
+  if (required != null) {
+    directShape.required = required;
+  }
+  if (getString(schema, 'type') === 'object') {
+    directShape.type = 'object';
+  }
+
+  return directShape;
+};
+
+const renderAllOfTypeExpression = (
+  context: OpenApiContext,
+  schema: JsonRecord,
+  indentLevel: number
+) => {
+  const allOf = asArray(schema.allOf);
+  if (allOf == null) {
+    throw new Error('Could not resolve allOf schema entries.');
+  }
+
+  const expressions = allOf.map((entry) => {
+    const entryRecord = asRecord(entry);
+    if (entryRecord == null) {
+      throw new Error('Could not resolve allOf schema entry.');
+    }
+    return renderTypeExpression(context, entryRecord, indentLevel);
+  });
+  const directObjectShape = getDirectAllOfObjectShape(schema);
+  if (directObjectShape != null) {
+    expressions.push(
+      renderTypeExpression(context, directObjectShape, indentLevel)
+    );
+  }
+
+  return expressions.join(' & ');
+};
 
 const renderTypeExpression = (
   context: OpenApiContext,
@@ -706,31 +1130,24 @@ const renderTypeExpression = (
 
   const nullable = getBoolean(schema, 'nullable') ?? false;
   let coreType: string;
-  const directReference = getDirectReference(schema);
-  const allOfReference = getSingleReferenceFromAllOf(schema);
+  const referenceTypeExpression = getReferenceTypeExpression(context, schema);
 
-  if (directReference != null && isReferenceWrapperSchema(schema)) {
-    coreType = resolveReferenceTypeName(context, directReference);
-  } else if (allOfReference != null && isAllOfReferenceWrapperSchema(schema)) {
-    coreType = resolveReferenceTypeName(context, allOfReference);
+  if (referenceTypeExpression != null) {
+    coreType = referenceTypeExpression;
   } else if (asArray(schema.allOf) != null) {
-    const flattened = tryFlattenObjectSchema(
-      context,
-      schema,
-      new Set<string>()
-    );
-    if (flattened != null) {
-      coreType = renderInlineObjectType(flattened, indentLevel);
+    if (shouldPreserveAllOfReferences(schema)) {
+      coreType = renderAllOfTypeExpression(context, schema, indentLevel);
     } else {
-      coreType = asArray(schema.allOf)!
-        .map((entry) =>
-          renderTypeExpression(
-            context,
-            resolveSchemaObject(context.document, asRecord(entry)),
-            indentLevel
-          )
-        )
-        .join(' & ');
+      const flattened = tryFlattenObjectSchema(
+        context,
+        schema,
+        new Set<string>()
+      );
+      if (flattened != null) {
+        coreType = renderInlineObjectType(flattened, indentLevel);
+      } else {
+        coreType = renderAllOfTypeExpression(context, schema, indentLevel);
+      }
     }
   } else if (asArray(schema.enum) != null) {
     coreType = renderEnumType(asArray(schema.enum)!);
@@ -748,12 +1165,9 @@ const renderTypeExpression = (
         coreType = 'boolean';
         break;
       case 'array':
-        coreType = `Array<${renderTypeExpression(
+        coreType = `ReadonlyArray<${renderTypeExpression(
           context,
-          resolveSchemaObject(
-            context.document,
-            getRequiredRecord(schema, 'items', 'array items')
-          ),
+          getRequiredRecord(schema, 'items', 'array items'),
           indentLevel
         )}>`;
         break;
@@ -1009,6 +1423,89 @@ const hasUnsupportedComposition = (schema: JsonRecord) => {
     asArray(schema.anyOf) != null ||
     getRecord(schema, 'discriminator') != null
   );
+};
+
+const renderRequestBodyArgumentExpression = (
+  context: OpenApiContext,
+  operation: OperationDefinition,
+  optionalArguments: boolean
+) => {
+  if (operation.requestBody == null) {
+    return 'undefined';
+  }
+
+  if (shouldUseRequestBodyEnvelope(context, operation)) {
+    return optionalArguments ? 'args?.body' : 'args.body';
+  }
+
+  const parameterPropertyNames = getOperationParameters(operation).map(
+    (parameter) => parameter.propertyName
+  );
+  if (parameterPropertyNames.length === 0) {
+    return 'args';
+  }
+
+  return `modestaExcludeProperties(args, ${renderLiteral(parameterPropertyNames)})`;
+};
+
+const getResponseHeaderValueDescriptor = (
+  context: OpenApiContext,
+  schema: JsonRecord
+): {
+  itemValueType: 'string' | 'number' | 'boolean' | 'unknown' | undefined;
+  valueType: 'string' | 'number' | 'boolean' | 'array' | 'unknown';
+} => {
+  const directReference = getDirectReference(schema);
+  if (directReference != null) {
+    const resolved = resolveReferenceObject(context.document, schema);
+    return resolved != null
+      ? getResponseHeaderValueDescriptor(context, resolved)
+      : { itemValueType: undefined, valueType: 'unknown' };
+  }
+
+  const allOfReference = getSingleReferenceFromAllOf(schema);
+  if (allOfReference != null) {
+    const resolved = resolveReferenceObject(context.document, {
+      $ref: allOfReference,
+    });
+    return resolved != null
+      ? getResponseHeaderValueDescriptor(context, resolved)
+      : { itemValueType: undefined, valueType: 'unknown' };
+  }
+
+  switch (getString(schema, 'type')) {
+    case 'string':
+      return { itemValueType: undefined, valueType: 'string' };
+    case 'number':
+    case 'integer':
+      return { itemValueType: undefined, valueType: 'number' };
+    case 'boolean':
+      return { itemValueType: undefined, valueType: 'boolean' };
+    case 'array': {
+      const items = getRecord(schema, 'items');
+      if (items == null) {
+        return { itemValueType: 'unknown', valueType: 'array' };
+      }
+      const itemDescriptor = getResponseHeaderValueDescriptor(context, items);
+      return {
+        itemValueType:
+          itemDescriptor.valueType === 'array'
+            ? 'unknown'
+            : itemDescriptor.valueType,
+        valueType: 'array',
+      };
+    }
+    default:
+      return { itemValueType: undefined, valueType: 'unknown' };
+  }
+};
+
+const getOperationParameters = (operation: OperationDefinition) => {
+  return [
+    ...operation.pathParameters,
+    ...operation.queryParameters,
+    ...operation.headerParameters,
+  ];
 };
 
 const resolveReferenceTypeName = (

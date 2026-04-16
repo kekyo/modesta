@@ -447,7 +447,7 @@ describe('CLI and format support', () => {
       expect(fromYaml).toBe(fromJson);
       expect(fromJson).toContain('export interface LookupSummaries {');
       expect(fromJson).toContain(
-        'readonly post: (args: LookupSummaries_post_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<LookupSummaries_post_response>;'
+        'readonly post: (args: LookupRequest, options?: AccessorOptionsWithoutContext | undefined) => Promise<LookupSummaries_post_response>;'
       );
       expect(fromJson).toContain('[key: string]: SummaryItem;');
       expect(fromJson).toContain('recordedAt: string;');
@@ -499,33 +499,40 @@ describe('CLI and format support', () => {
     }
   });
 
-  it('fails explicitly for unsupported schema composition', () => {
-    expect(() =>
-      generateAccessorSource({
-        document: {
-          openapi: '3.0.1',
-          info: {
-            title: 'Unsupported',
-          },
-          paths: {
-            '/value': {
-              get: {
-                responses: {
-                  '200': {
-                    content: {
-                      'application/json': {
-                        schema: {
-                          oneOf: [{ type: 'string' }, { type: 'number' }],
-                        },
-                      },
+  it('fails explicitly for unsupported schema composition', async () => {
+    const unsupportedDocument = {
+      openapi: '3.0.1',
+      info: {
+        title: 'Unsupported',
+      },
+      paths: {
+        '/value': {
+          get: {
+            responses: {
+              '200': {
+                content: {
+                  'application/json': {
+                    schema: {
+                      oneOf: [{ type: 'string' }, { type: 'number' }],
                     },
-                    description: 'OK',
                   },
                 },
+                description: 'OK',
               },
             },
           },
         },
+      },
+    };
+    await saveArtifactText(
+      'cli-and-formats',
+      'swagger/unsupported-composition.json',
+      JSON.stringify(unsupportedDocument, null, 2)
+    );
+
+    expect(() =>
+      generateAccessorSource({
+        document: unsupportedDocument,
       })
     ).toThrow(/oneOf\/anyOf\/discriminator/);
   });

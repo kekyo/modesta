@@ -11,6 +11,7 @@ import {
   ParameterDefinition,
   RequestBodyDefinition,
   ResponseDefinition,
+  ResponseHeaderDefinition,
 } from './types';
 import {
   asArray,
@@ -24,6 +25,7 @@ import {
   getString,
   isPureReference,
   isRecord,
+  normalizeParameterName,
   selectSuccessStatusCode,
 } from '../util';
 
@@ -75,11 +77,14 @@ export const resolveParameters = (
         : getRequiredRecord(parameter, 'schema', 'parameter schema');
 
     const name = getRequiredString(parameter, 'name', 'parameter name');
+    const propertyName = normalizeParameterName(name, 'value');
     return {
       description: getString(parameter, 'description'),
+      duplicatedPropertyName: undefined,
       location,
       name,
-      propertyName: name,
+      originalPropertyName: propertyName,
+      propertyName,
       required: getBoolean(parameter, 'required') ?? location === 'path',
       schema,
     } satisfies ParameterDefinition;
@@ -105,7 +110,8 @@ export const mergeParameters = (
 export const resolveRequestBody = (
   context: OpenApiContext,
   operation: JsonRecord,
-  requestBodyTypeName: string
+  requestBodyTypeName: string,
+  envelopeTypeName: string | undefined = undefined
 ): RequestBodyDefinition | undefined => {
   const rawRequestBody = resolveReferenceObject(
     context.document,
@@ -123,6 +129,7 @@ export const resolveRequestBody = (
 
   return {
     contentType: mediaType.mediaType,
+    envelopeTypeName,
     parameterDescription: getString(rawRequestBody, 'description'),
     required: getBoolean(rawRequestBody, 'required') ?? false,
     schema: mediaType.schema,
@@ -137,7 +144,9 @@ export const resolveRequestBody = (
 export const resolveResponse = (
   context: OpenApiContext,
   operation: JsonRecord,
-  responseTypeName: string
+  responseTypeName: string,
+  headersTypeName: string | undefined = undefined,
+  bodyEnvelopeTypeName: string | undefined = undefined
 ): ResponseDefinition => {
   const responses = getRequiredRecord(operation, 'responses', 'responses');
   const statusCode = selectSuccessStatusCode(responses);
@@ -151,11 +160,16 @@ export const resolveResponse = (
     );
   }
 
+  const headers = resolveResponseHeaders(context, response);
+
   const content = getRecord(response, 'content');
   if (content == null || Object.keys(content).length === 0) {
     return {
       accept: undefined,
+      bodyEnvelopeTypeName,
       description: getString(response, 'description'),
+      headers,
+      headersTypeName,
       schema: undefined,
       statusCode,
       typeName: responseTypeName,
@@ -170,11 +184,99 @@ export const resolveResponse = (
 
   return {
     accept: mediaType.mediaType,
+    bodyEnvelopeTypeName,
     description: getString(response, 'description'),
+    headers,
+    headersTypeName,
     schema: mediaType.schema,
     statusCode,
     typeName: responseTypeName,
   };
+};
+
+export const resolveResponseHeaders = (
+  context: OpenApiContext,
+  response: JsonRecord
+): readonly ResponseHeaderDefinition[] => {
+  const rawHeaders = getRecord(response, 'headers');
+  if (rawHeaders == null) {
+    return [];
+  }
+
+  return Object.entries(rawHeaders)
+    .filter(([name]) => name.toLowerCase() !== 'content-type')
+    .map(([name, rawHeader]) => {
+      const header = resolveReferenceObject(
+        context.document,
+        asRecord(rawHeader)
+      );
+      if (header == null) {
+        throw new Error(`Could not resolve response header '${name}'.`);
+      }
+
+      const content = getRecord(header, 'content');
+      const schema =
+        content != null
+          ? resolveMediaTypeSchema(
+              context.document,
+              content,
+              `responseHeader:${name}`
+            ).schema
+          : getRequiredRecord(
+              header,
+              'schema',
+              `response header '${name}' schema`
+            );
+      const propertyName = normalizeParameterName(name, 'header');
+      return {
+        description: getString(header, 'description'),
+        duplicatedPropertyName: undefined,
+        name,
+        originalPropertyName: propertyName,
+        propertyName,
+        required: getBoolean(header, 'required') ?? false,
+        schema,
+      } satisfies ResponseHeaderDefinition;
+    });
+};
+
+export const isSchemaObjectLike = (
+  document: JsonRecord,
+  schema: JsonRecord,
+  visitedReferences: Set<string> = new Set<string>()
+): boolean => {
+  const reference = getDirectReference(schema);
+  if (reference != null) {
+    if (visitedReferences.has(reference)) {
+      return false;
+    }
+    visitedReferences.add(reference);
+    const resolved = resolveReferenceObject(document, schema);
+    return resolved != null
+      ? isSchemaObjectLike(document, resolved, visitedReferences)
+      : false;
+  }
+
+  if (
+    getString(schema, 'type') === 'object' ||
+    getRecord(schema, 'properties') != null ||
+    schema.additionalProperties != null
+  ) {
+    return true;
+  }
+
+  const allOf = asArray(schema.allOf);
+  if (allOf != null) {
+    return allOf.some((entry) => {
+      const entryRecord = asRecord(entry);
+      return (
+        entryRecord != null &&
+        isSchemaObjectLike(document, entryRecord, visitedReferences)
+      );
+    });
+  }
+
+  return false;
 };
 
 export const resolveMediaTypeSchema = (

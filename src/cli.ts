@@ -97,6 +97,7 @@ const syncFromViteConfig = async () => {
 };
 
 const main = async () => {
+  const logger = createConsoleLogger('modesta');
   const parsed = parseArgs({
     options: {
       help: {
@@ -142,9 +143,11 @@ const main = async () => {
           source: httpUrlPattern.test(inputPath)
             ? inputPath
             : resolve(process.cwd(), inputPath),
+          warningSink: logger.warn,
         })
       : generateAccessorSource({
           document: await readTextFromStdin(),
+          warningSink: logger.warn,
         });
 
   if (outputPath == null) {

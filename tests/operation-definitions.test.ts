@@ -4,16 +4,12 @@
 // https://github.com/kekyo/modesta/
 
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { generateAccessorSource } from '../src/generator';
 import {
   generateAccessorSourceFromProject,
   SwaggerFixtureProject,
   transpileGeneratedSource,
 } from './support/harness';
-import {
-  getInterfaceBlock,
-  getTypeAliasStatement,
-} from './support/source-assertions';
+import { getInterfaceBlock } from './support/source-assertions';
 
 const operationProject: SwaggerFixtureProject = {
   files: {
@@ -42,9 +38,17 @@ const operationProject: SwaggerFixtureProject = {
       '    TypedResults.Ok(new SimpleRecord(apiKey, "header")))',
       '    .WithName("GetHeaderValue");',
       '',
+      'app.MapGet("/combined/{id}", ([FromRoute] string id, [FromQuery(Name = "page-size")] int pageSize, [FromHeader(Name = "x-api-key")] string apiKey) =>',
+      '    TypedResults.Ok(new SimpleRecord($"{id}:{pageSize}:{apiKey}", "combined")))',
+      '    .WithName("GetCombinedValue");',
+      '',
       'app.MapPost("/body", ([FromBody] CreateItemRequest request) =>',
       '    TypedResults.Ok(new SimpleRecord(request.Name, "body")))',
       '    .WithName("CreateItem");',
+      '',
+      'app.MapPost("/combined/{id}", ([FromRoute] string id, [FromQuery(Name = "page-size")] int pageSize, [FromHeader(Name = "x-api-key")] string apiKey, [FromBody] CreateItemRequest request) =>',
+      '    TypedResults.Ok(new SimpleRecord($"{id}:{pageSize}:{apiKey}:{request.Name}", "combined-body")))',
+      '    .WithName("CreateCombinedItem");',
       '',
       'app.MapGet("/array", () =>',
       '    TypedResults.Ok(new[]',
@@ -72,9 +76,160 @@ const operationProject: SwaggerFixtureProject = {
   },
 };
 
+const operationEdgeCaseProject: SwaggerFixtureProject = {
+  files: {
+    'Program.cs': [
+      'using Microsoft.AspNetCore.Mvc;',
+      '',
+      'var builder = WebApplication.CreateBuilder(args);',
+      'builder.Services.AddEndpointsApiExplorer();',
+      'builder.Services.AddSwaggerGen(options =>',
+      '    {',
+      '        options.SupportNonNullableReferenceTypes();',
+      '        options.NonNullableReferenceTypesAsRequired();',
+      '        options.OperationFilter<ResponseHeaderOperationFilter>();',
+      '    });',
+      'var app = builder.Build();',
+      'app.UseSwagger();',
+      '',
+      'app.MapGet("/users/{user_id}", ([FromRoute] string user_id) =>',
+      '    TypedResults.Ok(new CollisionValueResponse(user_id)))',
+      '    .WithName("GetUser");',
+      '',
+      'app.MapGet("/items/{id}", ([FromRoute] string id, [FromQuery(Name = "id")] string? queryId, [FromHeader(Name = "id")] string? headerId) =>',
+      '    TypedResults.Ok(new CollisionValueResponse($"{id}:{queryId}:{headerId}")))',
+      '    .WithName("GetDuplicateParameters");',
+      '',
+      'app.MapGet("/normalized-collision", ([FromQuery(Name = "x-api-key")] string? queryKey, [FromHeader(Name = "x.api.key")] string? headerKey) =>',
+      '    TypedResults.Ok(new CollisionValueResponse($"{queryKey}:{headerKey}")))',
+      '    .WithName("GetNormalizedCollision");',
+      '',
+      'app.MapGet("/normalized-distinct/{user_id}", ([FromRoute] string user_id, [FromQuery(Name = "user-id")] string? userId, [FromHeader(Name = "tenant.id")] string? tenantId) =>',
+      '    TypedResults.Ok(new CollisionValueResponse($"{user_id}:{userId}:{tenantId}")))',
+      '    .WithName("GetNormalizedDistinct");',
+      '',
+      'app.MapPost("/items/{id}", ([FromRoute] string id, [FromQuery(Name = "x-api-key")] string? queryApiKey, [FromHeader(Name = "x-api-key")] string? headerApiKey, [FromBody] CreateCollisionItemRequest request) =>',
+      '    TypedResults.Ok(new CollisionValueResponse(request.Name)))',
+      '    .WithName("CreateItem");',
+      '',
+      'app.MapPost("/text", ([FromBody] string body) => TypedResults.NoContent())',
+      '    .Accepts<string>("text/plain")',
+      '    .WithName("CreateText");',
+      '',
+      'app.MapPost("/text/{scope}", ([FromRoute] string scope, [FromHeader(Name = "x-trace-id")] string? traceId, [FromBody] string body) => TypedResults.NoContent())',
+      '    .Accepts<string>("text/plain")',
+      '    .WithName("CreateScopedText");',
+      '',
+      'app.MapPost("/number-list", ([FromBody] int[] values) => TypedResults.NoContent())',
+      '    .WithName("CreateNumberList");',
+      '',
+      'app.MapPut("/numbers/{scope}", ([FromRoute] string scope, [FromQuery(Name = "dry-run")] bool? dryRun, [FromBody] int[] values) => TypedResults.NoContent())',
+      '    .WithName("UpdateNumbers");',
+      '',
+      'app.MapGet("/token", () => Results.Empty)',
+      '    .Produces(StatusCodes.Status200OK)',
+      '    .WithName("GetToken");',
+      '',
+      'app.MapGet("/document", () =>',
+      '    TypedResults.Ok(new DocumentResponse("alpha")))',
+      '    .WithName("GetDocument");',
+      '',
+      'app.MapGet("/plain-message", () => TypedResults.Text("hello"))',
+      '    .Produces<string>(StatusCodes.Status200OK, "text/plain")',
+      '    .WithName("GetPlainMessage");',
+      '',
+      'app.MapGet("/numbers", () => TypedResults.Ok(new[] { 1, 2, 3 }))',
+      '    .WithName("GetNumbers");',
+      '',
+      'app.MapGet("/message", () => TypedResults.Text("hello"))',
+      '    .Produces<string>(StatusCodes.Status200OK, "text/plain")',
+      '    .WithName("GetMessage");',
+      '',
+      'app.MapGet("/number-message", () => TypedResults.Ok(new[] { 1, 2, 3 }))',
+      '    .WithName("GetNumberMessage");',
+      '',
+      'app.MapGet("/response-collision", () =>',
+      '    TypedResults.Ok(new ResponseCollisionBody("body-tag")))',
+      '    .WithName("GetResponseCollision");',
+      '',
+      'app.Run();',
+      '',
+    ].join('\n'),
+    'Models.cs': [
+      'public sealed record CollisionValueResponse(string Value);',
+      'public sealed record CreateCollisionItemRequest(string Id, string XApiKey, string Name);',
+      'public sealed record DocumentResponse(string Value);',
+      'public sealed record ResponseCollisionBody(string Etag);',
+      '',
+    ].join('\n'),
+    'ResponseHeaderOperationFilter.cs': [
+      'using Microsoft.OpenApi.Models;',
+      'using Swashbuckle.AspNetCore.SwaggerGen;',
+      '',
+      'public sealed class ResponseHeaderOperationFilter : IOperationFilter',
+      '{',
+      '    public void Apply(OpenApiOperation operation, OperationFilterContext context)',
+      '    {',
+      '        if (operation.OperationId is null)',
+      '        {',
+      '            return;',
+      '        }',
+      '',
+      '        if (!operation.Responses.TryGetValue("200", out var response))',
+      '        {',
+      '            return;',
+      '        }',
+      '',
+      '        switch (operation.OperationId)',
+      '        {',
+      '            case "GetToken":',
+      '                AddStringHeader(response, "x-request-id", "Request identifier.");',
+      '                break;',
+      '            case "GetDocument":',
+      '                AddStringHeader(response, "etag", "Entity tag.");',
+      '                break;',
+      '            case "GetMessage":',
+      '                AddStringHeader(response, "etag", "Entity tag.");',
+      '                break;',
+      '            case "GetNumberMessage":',
+      '                AddStringHeader(response, "etag", "Entity tag.");',
+      '                break;',
+      '            case "GetResponseCollision":',
+      '                AddStringHeader(response, "etag", "Entity tag.");',
+      '                AddStringHeader(response, "x-api-key", "Primary collision key.");',
+      '                AddStringHeader(response, "x.api.key", "Secondary collision key.");',
+      '                break;',
+      '        }',
+      '    }',
+      '',
+      '    private static void AddStringHeader(OpenApiResponse response, string name, string description)',
+      '    {',
+      '        response.Headers ??= new Dictionary<string, OpenApiHeader>();',
+      '        response.Headers[name] = new OpenApiHeader',
+      '        {',
+      '            Description = description,',
+      '            Schema = new OpenApiSchema',
+      '            {',
+      '                Type = "string",',
+      '            },',
+      '        };',
+      '    }',
+      '}',
+      '',
+    ].join('\n'),
+  },
+};
+
 describe('operation definition generation', () => {
   let generatedSource = '';
   let generatedModule: Record<string, any>;
+  let edgeCaseGeneratedSource = '';
+  let edgeCaseGeneratedModule: Record<string, any>;
+  const edgeCaseWarnings: string[] = [];
+  const getEdgeCaseWarnings = (accessorName: string) =>
+    edgeCaseWarnings.filter((message) =>
+      message.includes(`accessor '${accessorName}'`)
+    );
 
   beforeAll(async () => {
     generatedSource = await generateAccessorSourceFromProject({
@@ -83,6 +238,17 @@ describe('operation definition generation', () => {
       project: operationProject,
     });
     generatedModule = await transpileGeneratedSource(generatedSource);
+    edgeCaseGeneratedSource = await generateAccessorSourceFromProject({
+      artifactName: 'operation-definitions-edge-cases',
+      generatedArtifactPath: 'generated/operation-definitions-edge-cases.ts',
+      project: operationEdgeCaseProject,
+      warningSink: (message) => {
+        edgeCaseWarnings.push(message);
+      },
+    });
+    edgeCaseGeneratedModule = await transpileGeneratedSource(
+      edgeCaseGeneratedSource
+    );
   });
 
   it('flattens route parameter definitions into argument groups', () => {
@@ -95,43 +261,62 @@ describe('operation definition generation', () => {
     expect(argumentsBlock).not.toContain('pathParameters:');
   });
 
-  it('separates query attribute definitions with renamed names', () => {
-    const queryParametersBlock = getInterfaceBlock(
+  it('flattens query parameters and normalizes unsafe characters', () => {
+    const argumentsBlock = getInterfaceBlock(
       generatedSource,
-      'GetPage_get_query_parameters'
+      'GetPage_get_arguments'
     );
 
-    expect(queryParametersBlock).toContain("'page-size': number;");
+    expect(argumentsBlock).toMatch(/pageSize\??: number;/);
+    expect(generatedSource).not.toContain('GetPage_get_query_parameters');
   });
 
-  it('separates header attribute definitions with renamed names', () => {
-    const headerParametersBlock = getInterfaceBlock(
+  it('flattens header parameters and normalizes unsafe characters', () => {
+    const argumentsBlock = getInterfaceBlock(
       generatedSource,
+      'GetHeaderValue_get_arguments'
+    );
+
+    expect(argumentsBlock).toMatch(/xApiKey\??: string;/);
+    expect(generatedSource).not.toContain(
       'GetHeaderValue_get_header_parameters'
     );
-
-    expect(headerParametersBlock).toContain("'x-api-key': string;");
   });
 
-  it('separates body parameter definitions', () => {
-    const requestBodyBlock = getInterfaceBlock(
-      generatedSource,
-      'CreateItem_post_request_body'
+  it('uses the shared body type directly when no flattened parameters are present', () => {
+    expect(generatedSource).toContain(
+      'readonly post: (args: CreateItemRequest, options?: AccessorOptionsWithoutContext | undefined) => Promise<SimpleRecord>;'
     );
-
-    expect(requestBodyBlock).toContain('name: string;');
+    expect(generatedSource).not.toContain('CreateItem_post_arguments');
+    expect(generatedSource).not.toContain('CreateItem_post_request_body');
   });
 
-  it('separates array return type definitions', () => {
-    const listItemsResponse = getTypeAliasStatement(
+  it('uses an intersection type when flattened parameters and a body coexist', () => {
+    const argumentsBlock = getInterfaceBlock(
       generatedSource,
-      'ListItems_get_response'
+      'CreateCombinedItem_post_arguments'
     );
 
-    expect(listItemsResponse).toContain('Array<{');
-    expect(generatedSource).toMatch(
-      /export type ListItems_get_response = Array<\{[\s\S]*id: string;[\s\S]*source: string;[\s\S]*\}>;/u
+    expect(argumentsBlock).toContain('id: string;');
+    expect(argumentsBlock).toMatch(/pageSize\??: number;/);
+    expect(argumentsBlock).toMatch(/xApiKey\??: string;/);
+    expect(generatedSource).toContain(
+      'readonly post: (args: CreateItemRequest & CreateCombinedItem_post_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<SimpleRecord>;'
     );
+  });
+
+  it('uses shared schema types directly for direct response definitions', () => {
+    expect(generatedSource).toContain(
+      'readonly get: (args: GetRouteValue_get_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<SimpleRecord>;'
+    );
+    expect(generatedSource).not.toContain('GetRouteValue_get_response');
+  });
+
+  it('uses shared schema types directly for array return type definitions', () => {
+    expect(generatedSource).toContain(
+      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ReadonlyArray<SimpleRecord>>;'
+    );
+    expect(generatedSource).not.toContain('ListItems_get_response');
   });
 
   it('separates dictionary return type definitions', () => {
@@ -143,21 +328,19 @@ describe('operation definition generation', () => {
     expect(dictionaryResponseBlock).toContain('[key: string]: SimpleRecord;');
   });
 
-  it('separates void return type definitions', () => {
-    expect(
-      getTypeAliasStatement(generatedSource, 'DeleteItem_delete_response')
-    ).toBe('export type DeleteItem_delete_response = void;');
+  it('uses void directly for empty responses', () => {
     expect(generatedSource).toContain(
       '_delete: (args: DeleteItem_delete_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
     );
+    expect(generatedSource).not.toContain('DeleteItem_delete_response');
   });
 
   it('omits args from no-argument accessor signatures', () => {
     expect(generatedSource).toContain(
-      'get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ListItems_get_response>;'
+      'get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ReadonlyArray<SimpleRecord>>;'
     );
     expect(generatedSource).not.toContain(
-      'get: (args?: ListItems_get_arguments | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<ListItems_get_response>;'
+      'get: (args?: ListItems_get_arguments | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<ReadonlyArray<SimpleRecord>>;'
     );
   });
 
@@ -221,6 +404,8 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       undefined,
       { signal }
@@ -232,9 +417,7 @@ describe('operation definition generation', () => {
     const accessor = generatedModule.create_GetPage_accessor(sender);
 
     await accessor.get({
-      queryParameters: {
-        'page-size': 20,
-      },
+      pageSize: 20,
     });
 
     expect(sender).toHaveBeenCalledWith(
@@ -246,6 +429,8 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       undefined,
       undefined
@@ -274,6 +459,8 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       undefined,
       { signal }
@@ -285,9 +472,7 @@ describe('operation definition generation', () => {
     const accessor = generatedModule.create_GetHeaderValue_accessor(sender);
 
     await accessor.get({
-      headerParameters: {
-        'x-api-key': 'secret',
-      },
+      xApiKey: 'secret',
     });
 
     expect(sender).toHaveBeenCalledWith(
@@ -300,6 +485,36 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
+      },
+      undefined,
+      undefined
+    );
+  });
+
+  it('builds sender descriptors for combined path, query, and header parameters', async () => {
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor = generatedModule.create_GetCombinedValue_accessor(sender);
+
+    await accessor.get({
+      id: '42',
+      pageSize: 20,
+      xApiKey: 'secret',
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'GetCombinedValue.get',
+        method: 'GET',
+        url: '/combined/42?page-size=20',
+        headers: {
+          'x-api-key': 'secret',
+          accept: 'application/json',
+        },
+        body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       undefined,
       undefined
@@ -311,9 +526,7 @@ describe('operation definition generation', () => {
     const accessor = generatedModule.create_CreateItem_accessor(sender);
 
     await accessor.post({
-      body: {
-        name: 'alpha',
-      },
+      name: 'alpha',
     });
 
     expect(sender).toHaveBeenCalledWith(
@@ -328,6 +541,8 @@ describe('operation definition generation', () => {
         body: {
           name: 'alpha',
         },
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       undefined,
       undefined
@@ -343,9 +558,7 @@ describe('operation definition generation', () => {
 
     await accessor.post(
       {
-        body: {
-          name: 'alpha',
-        },
+        name: 'alpha',
       },
       {
         context: {
@@ -367,6 +580,8 @@ describe('operation definition generation', () => {
         body: {
           name: 'alpha',
         },
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       {
         traceId: 'trace-42',
@@ -377,6 +592,38 @@ describe('operation definition generation', () => {
         },
         signal,
       }
+    );
+  });
+
+  it('builds sender descriptors for combined path, query, header, and body parameters', async () => {
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor = generatedModule.create_CreateCombinedItem_accessor(sender);
+
+    await accessor.post({
+      id: '42',
+      pageSize: 20,
+      xApiKey: 'secret',
+      name: 'alpha',
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'CreateCombinedItem.post',
+        method: 'POST',
+        url: '/combined/42?page-size=20',
+        headers: {
+          'x-api-key': 'secret',
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: {
+          name: 'alpha',
+        },
+        responseHeaders: [],
+        wrapResponseBody: false,
+      },
+      undefined,
+      undefined
     );
   });
 
@@ -399,6 +646,8 @@ describe('operation definition generation', () => {
         url: '/items/42',
         headers: {},
         body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
       },
       {
         traceId: 'trace-42',
@@ -485,71 +734,611 @@ describe('operation definition generation', () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(1);
   });
 
-  it('fails when flattened path parameter names collide with request body members', () => {
-    expect(() =>
-      generateAccessorSource({
-        document: {
-          openapi: '3.0.3',
-          info: {
-            title: 'Argument collision',
-            version: '1.0.0',
-          },
-          paths: {
-            '/items/{body}': {
-              post: {
-                operationId: 'CreateItem',
-                parameters: [
-                  {
-                    in: 'path',
-                    name: 'body',
-                    required: true,
-                    schema: {
-                      type: 'string',
-                    },
-                  },
-                ],
-                requestBody: {
-                  required: true,
-                  content: {
-                    'application/json': {
-                      schema: {
-                        type: 'object',
-                        required: ['name'],
-                        properties: {
-                          name: {
-                            type: 'string',
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-                responses: {
-                  '200': {
-                    description: 'OK',
-                    content: {
-                      'application/json': {
-                        schema: {
-                          type: 'object',
-                          required: ['value'],
-                          properties: {
-                            value: {
-                              type: 'string',
-                            },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      })
-    ).toThrow(
-      /Generated argument member 'body' in accessor 'CreateItem' method 'post' is ambiguous/
+  it('retains underscores in normalized parameter names', () => {
+    const argumentsBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'GetUser_get_arguments'
     );
+    expect(argumentsBlock).toContain('user_id: string;');
+  });
+
+  it('renames duplicated parameter-only names and emits warnings without a request body', async () => {
+    const argumentsBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'GetDuplicateParameters_get_arguments'
+    );
+    expect(argumentsBlock).toContain('path_id: string;');
+    expect(argumentsBlock).toContain('query_id?: string;');
+    expect(argumentsBlock).toContain('header_id?: string;');
+    expect(argumentsBlock).toContain("@remarks Duplicated argument name: 'id'");
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly get: (args: GetDuplicateParameters_get_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<CollisionValueResponse>;'
+    );
+
+    const warnings = getEdgeCaseWarnings('GetDuplicateParameters');
+    expect(warnings).toHaveLength(3);
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        "Renamed path parameter 'id' to 'path_id' in accessor 'GetDuplicateParameters' method 'get' because generated argument name 'id' was duplicated.",
+        "Renamed query parameter 'id' to 'query_id' in accessor 'GetDuplicateParameters' method 'get' because generated argument name 'id' was duplicated.",
+        "Renamed header parameter 'id' to 'header_id' in accessor 'GetDuplicateParameters' method 'get' because generated argument name 'id' was duplicated.",
+      ])
+    );
+
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor =
+      edgeCaseGeneratedModule.create_GetDuplicateParameters_accessor(sender);
+
+    await accessor.get({
+      path_id: 'route-42',
+      query_id: 'query-42',
+      header_id: 'header-42',
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'GetDuplicateParameters.get',
+        method: 'GET',
+        url: '/items/route-42?id=query-42',
+        headers: {
+          id: 'header-42',
+          accept: 'application/json',
+        },
+        body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
+      },
+      undefined,
+      undefined
+    );
+  });
+
+  it('renames parameters whose normalized names collide and preserves each wire name', async () => {
+    const argumentsBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'GetNormalizedCollision_get_arguments'
+    );
+    expect(argumentsBlock).toContain('query_xApiKey?: string;');
+    expect(argumentsBlock).toContain('header_xApiKey?: string;');
+    expect(argumentsBlock).toContain(
+      "@remarks Duplicated argument name: 'xApiKey'"
+    );
+
+    const warnings = getEdgeCaseWarnings('GetNormalizedCollision');
+    expect(warnings).toHaveLength(2);
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        "Renamed query parameter 'x-api-key' to 'query_xApiKey' in accessor 'GetNormalizedCollision' method 'get' because generated argument name 'xApiKey' was duplicated.",
+        "Renamed header parameter 'x.api.key' to 'header_xApiKey' in accessor 'GetNormalizedCollision' method 'get' because generated argument name 'xApiKey' was duplicated.",
+      ])
+    );
+
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor =
+      edgeCaseGeneratedModule.create_GetNormalizedCollision_accessor(sender);
+
+    await accessor.get({
+      query_xApiKey: 'query-key',
+      header_xApiKey: 'header-key',
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'GetNormalizedCollision.get',
+        method: 'GET',
+        url: '/normalized-collision?x-api-key=query-key',
+        headers: {
+          'x.api.key': 'header-key',
+          accept: 'application/json',
+        },
+        body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
+      },
+      undefined,
+      undefined
+    );
+  });
+
+  it('does not rename parameters when normalization keeps their names distinct', async () => {
+    const argumentsBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'GetNormalizedDistinct_get_arguments'
+    );
+    expect(argumentsBlock).toContain('user_id: string;');
+    expect(argumentsBlock).toContain('userId?: string;');
+    expect(argumentsBlock).toContain('tenantId?: string;');
+    expect(argumentsBlock).not.toContain('path_user_id');
+    expect(argumentsBlock).not.toContain('query_userId');
+    expect(argumentsBlock).not.toContain('header_tenantId');
+    expect(argumentsBlock).not.toContain('@remarks Duplicated argument name');
+    expect(getEdgeCaseWarnings('GetNormalizedDistinct')).toEqual([]);
+
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor =
+      edgeCaseGeneratedModule.create_GetNormalizedDistinct_accessor(sender);
+
+    await accessor.get({
+      user_id: 'route-42',
+      userId: 'query-42',
+      tenantId: 'header-42',
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'GetNormalizedDistinct.get',
+        method: 'GET',
+        url: '/normalized-distinct/route-42?user-id=query-42',
+        headers: {
+          'tenant.id': 'header-42',
+          accept: 'application/json',
+        },
+        body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
+      },
+      undefined,
+      undefined
+    );
+  });
+
+  it('renames duplicated flattened parameter names, keeps wire names, and excludes them from the request body', async () => {
+    const argumentsBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'CreateItem_post_arguments'
+    );
+    expect(argumentsBlock).toContain('path_id: string;');
+    expect(argumentsBlock).toContain('query_xApiKey?: string;');
+    expect(argumentsBlock).toContain('header_xApiKey?: string;');
+    expect(argumentsBlock).toContain("@remarks Duplicated argument name: 'id'");
+    expect(argumentsBlock).toContain(
+      "@remarks Duplicated argument name: 'xApiKey'"
+    );
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly post: (args: CreateCollisionItemRequest & CreateItem_post_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<CollisionValueResponse>;'
+    );
+
+    const warnings = getEdgeCaseWarnings('CreateItem');
+    expect(warnings).toHaveLength(3);
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        "Renamed path parameter 'id' to 'path_id' in accessor 'CreateItem' method 'post' because generated argument name 'id' was duplicated.",
+        "Renamed query parameter 'x-api-key' to 'query_xApiKey' in accessor 'CreateItem' method 'post' because generated argument name 'xApiKey' was duplicated.",
+        "Renamed header parameter 'x-api-key' to 'header_xApiKey' in accessor 'CreateItem' method 'post' because generated argument name 'xApiKey' was duplicated.",
+      ])
+    );
+
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor = edgeCaseGeneratedModule.create_CreateItem_accessor(sender);
+
+    await accessor.post({
+      id: 'body-42',
+      xApiKey: 'body-key',
+      name: 'alpha',
+      path_id: 'route-42',
+      query_xApiKey: 'query-key',
+      header_xApiKey: 'header-key',
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'CreateItem.post',
+        method: 'POST',
+        url: '/items/route-42?x-api-key=query-key',
+        headers: {
+          'x-api-key': 'header-key',
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: {
+          id: 'body-42',
+          xApiKey: 'body-key',
+          name: 'alpha',
+        },
+        responseHeaders: [],
+        wrapResponseBody: false,
+      },
+      undefined,
+      undefined
+    );
+  });
+
+  it('uses primitive request bodies directly when no flattened parameters are present', async () => {
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly post: (args: string, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
+    );
+    expect(edgeCaseGeneratedSource).not.toContain(
+      'CreateText_post_request_envelope'
+    );
+
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor = edgeCaseGeneratedModule.create_CreateText_accessor(sender);
+
+    await accessor.post('alpha');
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'CreateText.post',
+        method: 'POST',
+        url: '/text',
+        headers: {
+          'content-type': 'text/plain',
+        },
+        body: 'alpha',
+        responseHeaders: [],
+        wrapResponseBody: false,
+      },
+      undefined,
+      undefined
+    );
+  });
+
+  it('wraps primitive request bodies in an envelope while intersecting flattened parameters', async () => {
+    const requestEnvelopeBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'CreateScopedText_post_request_envelope'
+    );
+    expect(requestEnvelopeBlock).toContain('readonly body: string;');
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly post: (args: CreateScopedText_post_request_envelope & CreateScopedText_post_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
+    );
+
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor =
+      edgeCaseGeneratedModule.create_CreateScopedText_accessor(sender);
+
+    await accessor.post({
+      scope: 'alpha',
+      xTraceId: 'trace-42',
+      body: 'payload',
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'CreateScopedText.post',
+        method: 'POST',
+        url: '/text/alpha',
+        headers: {
+          'x-trace-id': 'trace-42',
+          'content-type': 'text/plain',
+        },
+        body: 'payload',
+        responseHeaders: [],
+        wrapResponseBody: false,
+      },
+      undefined,
+      undefined
+    );
+  });
+
+  it('uses array request bodies directly when no flattened parameters are present', async () => {
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly post: (args: ReadonlyArray<number>, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
+    );
+    expect(edgeCaseGeneratedSource).not.toContain(
+      'CreateNumberList_post_request_envelope'
+    );
+    expect(edgeCaseGeneratedSource).toContain(
+      [
+        '  } as CreateItem | CreateItem_with_context<TAccessorContext>;',
+        '}',
+        '',
+        '/** CreateNumberList accessor definition. */',
+      ].join('\n')
+    );
+    expect(edgeCaseGeneratedSource).not.toContain(
+      [
+        '  } as CreateItem | CreateItem_with_context<TAccessorContext>;',
+        '}',
+        '',
+        '',
+        '',
+        '/** CreateNumberList accessor definition. */',
+      ].join('\n')
+    );
+
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor =
+      edgeCaseGeneratedModule.create_CreateNumberList_accessor(sender);
+
+    await accessor.post([1, 2, 3]);
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'CreateNumberList.post',
+        method: 'POST',
+        url: '/number-list',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: [1, 2, 3],
+        responseHeaders: [],
+        wrapResponseBody: false,
+      },
+      undefined,
+      undefined
+    );
+  });
+
+  it('wraps array request bodies in an envelope while intersecting flattened parameters', async () => {
+    const requestEnvelopeBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'UpdateNumbers_put_request_envelope'
+    );
+    expect(requestEnvelopeBlock).toContain(
+      'readonly body: ReadonlyArray<number>;'
+    );
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly put: (args: UpdateNumbers_put_request_envelope & UpdateNumbers_put_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
+    );
+
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor =
+      edgeCaseGeneratedModule.create_UpdateNumbers_accessor(sender);
+
+    await accessor.put({
+      scope: 'global',
+      dryRun: true,
+      body: [1, 2, 3],
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'UpdateNumbers.put',
+        method: 'PUT',
+        url: '/numbers/global?dry-run=true',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: [1, 2, 3],
+        responseHeaders: [],
+        wrapResponseBody: false,
+      },
+      undefined,
+      undefined
+    );
+  });
+
+  it('returns projected response headers when the response body is absent', async () => {
+    const responseHeadersBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'GetToken_get_response_headers'
+    );
+    expect(responseHeadersBlock).toContain('xRequestId?: string;');
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<GetToken_get_response_headers>;'
+    );
+
+    const sender = edgeCaseGeneratedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          get: (name: string) => (name === 'x-request-id' ? 'req-42' : null),
+        },
+        text: async () => '',
+      })),
+    });
+    const accessor = edgeCaseGeneratedModule.create_GetToken_accessor(sender);
+
+    await expect(accessor.get()).resolves.toEqual({
+      xRequestId: 'req-42',
+    });
+  });
+
+  it('returns primitive response bodies directly when response headers are absent', async () => {
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<string>;'
+    );
+    expect(edgeCaseGeneratedSource).not.toContain(
+      'GetPlainMessage_get_response_body'
+    );
+    expect(edgeCaseGeneratedSource).not.toContain(
+      'GetPlainMessage_get_response_headers'
+    );
+
+    const sender = edgeCaseGeneratedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          get: () => null,
+        },
+        text: async () => 'hello',
+      })),
+    });
+    const accessor =
+      edgeCaseGeneratedModule.create_GetPlainMessage_accessor(sender);
+
+    await expect(accessor.get()).resolves.toBe('hello');
+  });
+
+  it('returns array response bodies directly when response headers are absent', async () => {
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ReadonlyArray<number>>;'
+    );
+    expect(edgeCaseGeneratedSource).not.toContain(
+      'GetNumbers_get_response_body'
+    );
+    expect(edgeCaseGeneratedSource).not.toContain(
+      'GetNumbers_get_response_headers'
+    );
+
+    const sender = edgeCaseGeneratedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          get: (name: string) =>
+            name === 'content-type' ? 'application/json' : null,
+        },
+        text: async () => JSON.stringify([1, 2, 3]),
+      })),
+    });
+    const accessor = edgeCaseGeneratedModule.create_GetNumbers_accessor(sender);
+
+    await expect(accessor.get()).resolves.toEqual([1, 2, 3]);
+  });
+
+  it('merges object response bodies with projected response headers', async () => {
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentResponse & GetDocument_get_response_headers>;'
+    );
+
+    const sender = edgeCaseGeneratedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          get: (name: string) =>
+            name === 'content-type'
+              ? 'application/json'
+              : name === 'etag'
+                ? 'etag-42'
+                : null,
+        },
+        text: async () => JSON.stringify({ value: 'alpha' }),
+      })),
+    });
+    const accessor =
+      edgeCaseGeneratedModule.create_GetDocument_accessor(sender);
+
+    await expect(accessor.get()).resolves.toEqual({
+      value: 'alpha',
+      etag: 'etag-42',
+    });
+  });
+
+  it('wraps primitive response bodies when response headers are also projected', async () => {
+    const responseEnvelopeBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'GetMessage_get_response_body'
+    );
+    expect(responseEnvelopeBlock).toContain('readonly body: string;');
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<GetMessage_get_response_body & GetMessage_get_response_headers>;'
+    );
+
+    const sender = edgeCaseGeneratedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          get: (name: string) => (name === 'etag' ? 'etag-99' : null),
+        },
+        text: async () => 'hello',
+      })),
+    });
+    const accessor = edgeCaseGeneratedModule.create_GetMessage_accessor(sender);
+
+    await expect(accessor.get()).resolves.toEqual({
+      body: 'hello',
+      etag: 'etag-99',
+    });
+  });
+
+  it('wraps array response bodies when response headers are also projected', async () => {
+    const responseEnvelopeBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'GetNumberMessage_get_response_body'
+    );
+    expect(responseEnvelopeBlock).toContain(
+      'readonly body: ReadonlyArray<number>;'
+    );
+    expect(edgeCaseGeneratedSource).toContain(
+      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<GetNumberMessage_get_response_body & GetNumberMessage_get_response_headers>;'
+    );
+
+    const sender = edgeCaseGeneratedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          get: (name: string) =>
+            name === 'content-type'
+              ? 'application/json'
+              : name === 'etag'
+                ? 'etag-100'
+                : null,
+        },
+        text: async () => JSON.stringify([1, 2, 3]),
+      })),
+    });
+    const accessor =
+      edgeCaseGeneratedModule.create_GetNumberMessage_accessor(sender);
+
+    await expect(accessor.get()).resolves.toEqual({
+      body: [1, 2, 3],
+      etag: 'etag-100',
+    });
+  });
+
+  it('renames duplicated response field names and emits warnings for response headers', async () => {
+    const responseHeadersBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'GetResponseCollision_get_response_headers'
+    );
+    expect(responseHeadersBlock).toContain('header_etag?: string;');
+    expect(responseHeadersBlock).toContain('header_xApiKey?: string;');
+    expect(responseHeadersBlock).toContain('header_xApiKey_2?: string;');
+    expect(responseHeadersBlock).toContain(
+      "@remarks Duplicated response field name: 'etag'"
+    );
+    expect(responseHeadersBlock).toContain(
+      "@remarks Duplicated response field name: 'xApiKey'"
+    );
+
+    const warnings = getEdgeCaseWarnings('GetResponseCollision');
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        "Renamed response header 'etag' to 'header_etag' in accessor 'GetResponseCollision' method 'get' because generated response field name 'etag' was duplicated.",
+        "Renamed response header 'x-api-key' to 'header_xApiKey' in accessor 'GetResponseCollision' method 'get' because generated response field name 'xApiKey' was duplicated.",
+        "Renamed response header 'x.api.key' to 'header_xApiKey_2' in accessor 'GetResponseCollision' method 'get' because generated response field name 'xApiKey' was duplicated.",
+      ])
+    );
+
+    const sender = edgeCaseGeneratedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          get: (name: string) =>
+            name === 'content-type'
+              ? 'application/json'
+              : name === 'etag'
+                ? 'header-tag'
+                : name === 'x-api-key'
+                  ? 'query-tag'
+                  : name === 'x.api.key'
+                    ? 'header-tag-2'
+                    : null,
+        },
+        text: async () => JSON.stringify({ etag: 'body-tag' }),
+      })),
+    });
+    const accessor =
+      edgeCaseGeneratedModule.create_GetResponseCollision_accessor(sender);
+
+    await expect(accessor.get()).resolves.toEqual({
+      etag: 'body-tag',
+      header_etag: 'header-tag',
+      header_xApiKey: 'query-tag',
+      header_xApiKey_2: 'header-tag-2',
+    });
   });
 
   it('emits fetch helper options without signal in init', () => {

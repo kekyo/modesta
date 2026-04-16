@@ -107,13 +107,11 @@ export interface GetUser_get_arguments {
   id: string;
 }
 
-export type GetUser_get_response = User;
-
 export interface GetUser {
   get: (
     args: GetUser_get_arguments,
     options?: AccessorOptions | undefined
-  ) => Promise<GetUser_get_response>;
+  ) => Promise<User>;
 }
 
 export function create_GetUser_accessor(
@@ -254,7 +252,7 @@ const generatedFromRemote = await generateAccessorSourceFromFile({
 ### 参照の解決
 
 - `$ref` はローカル参照のみ対応します
-- `#/components/schemas/...` の参照は、生成された共有型として再利用されます
+- `#/components/schemas/...` の参照は、直接 alias、配列要素、再利用可能な `allOf` メンバーを含めて、生成された共有型として再利用されます
 - `application/json` を最優先に、次に `+json`、最後に最初の content entry を採用します
 
 ---
@@ -385,7 +383,7 @@ export interface users {
   get_by_id: (
     args: users_get_by_id_arguments,
     options?: AccessorOptions | undefined
-  ) => Promise<users_get_by_id_response>;
+  ) => Promise<User>;
 }
 
 export function create_users_accessor<TAccessorInterfaceContext, TAccessorContext>(
@@ -424,7 +422,7 @@ OpenAPI スキーマは、おおむね次のように TypeScript へ変換され
 - `nullable: true` は `| null`
 - content を持たない成功レスポンスは `void`
 - `additionalProperties` は index signature
-- `allOf` は可能なら object として平坦化し、難しい場合は intersection として出力
+- `allOf` は可能なら object として平坦化しつつ、再利用可能なスキーマ参照を含む場合はインライン展開せず intersection として維持します
 
 生成ファイルの先頭には、次のようなヘッダが付与されます:
 

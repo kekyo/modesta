@@ -110,13 +110,11 @@ export interface GetUser_get_arguments {
   id: string;
 }
 
-export type GetUser_get_response = User;
-
 export interface GetUser {
   get: (
     args: GetUser_get_arguments,
     options?: AccessorOptions | undefined
-  ) => Promise<GetUser_get_response>;
+  ) => Promise<User>;
 }
 
 export function create_GetUser_accessor(
@@ -260,7 +258,7 @@ const generatedFromRemote = await generateAccessorSourceFromFile({
 ### Reference Resolution
 
 - Only local `$ref` references are supported
-- `#/components/schemas/...` references are reused as shared generated types
+- `#/components/schemas/...` references are reused as shared generated types, including direct aliases, array items, and reusable `allOf` members
 - It prioritizes `application/json`, then `+json`, then the first available content entry
 
 ---
@@ -391,7 +389,7 @@ export interface users {
   get_by_id: (
     args: users_get_by_id_arguments,
     options?: AccessorOptions | undefined
-  ) => Promise<users_get_by_id_response>;
+  ) => Promise<User>;
 }
 
 export function create_users_accessor<TAccessorInterfaceContext, TAccessorContext>(
@@ -430,7 +428,7 @@ OpenAPI schemas are converted to TypeScript roughly as follows:
 - `nullable: true` becomes `| null`
 - Successful responses without content become `void`
 - `additionalProperties` becomes an index signature
-- `allOf` is flattened into an object when possible, or emitted as an intersection when not
+- `allOf` is flattened into an object when possible, but reusable schema references are kept as intersections instead of being expanded inline
 
 Generated files start with a header like this:
 

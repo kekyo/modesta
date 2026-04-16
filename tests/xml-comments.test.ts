@@ -238,6 +238,8 @@ describe('xml comments integration', () => {
         '/**',
         ' * Creates a documented response.',
         ' * @param args Optional arguments for POST /xml-comments/documented.',
+        ' * Request body payload is passed directly as args.',
+        ' * Request body: Documented request body.',
         ' * @param options Additional accessor call options without per-call context.',
         ' * @returns XML documented create response.',
         ' */',
@@ -305,6 +307,16 @@ describe('xml comments integration', () => {
       'body',
       '/** Request body payload passed to the sender. */'
     );
+    expectMemberDocumentation(
+      requestDescriptorBlock,
+      'responseHeaders',
+      '/** Response header definitions used to project the sender result. */'
+    );
+    expectMemberDocumentation(
+      requestDescriptorBlock,
+      'wrapResponseBody',
+      '/** Indicates that primitive or array response bodies must be exposed through a `body` member when response headers are also defined. */'
+    );
     expect(getInterfaceDocumentation(generatedSource, 'AccessorOptions')).toBe(
       '/** Shared options accepted by generated accessor methods. */'
     );
@@ -322,6 +334,16 @@ describe('xml comments integration', () => {
       [
         '/**',
         ' * Additional options accepted by accessors that require a per-call context value.',
+        ' * @typeParam TAccessorContext Per-call context value type passed to the sender.',
+        ' */',
+      ].join('\n')
+    );
+    expect(
+      getInterfaceDocumentation(generatedSource, 'xml_comments_with_context')
+    ).toBe(
+      [
+        '/**',
+        ' * xml_comments accessor definition that requires per-call context values.',
         ' * @typeParam TAccessorContext Per-call context value type passed to the sender.',
         ' */',
       ].join('\n')
@@ -417,73 +439,53 @@ describe('xml comments integration', () => {
   });
 
   it('renders parameter comments on generated parameter members', () => {
-    const queryParametersBlock = getInterfaceBlock(
+    const argumentsBlock = getInterfaceBlock(
       generatedSource,
-      'xml_comments_get_documented_query_parameters'
+      'xml_comments_get_documented_arguments'
     );
-    expect(queryParametersBlock).toContain('filter?: string;');
+    expect(argumentsBlock).toContain('filter?: string;');
     expectMemberDocumentation(
-      queryParametersBlock,
+      argumentsBlock,
       'filter',
       '/** Filter text from XML parameter comments. */'
     );
   });
 
-  it('renders body parameter comments on args.body and keeps schema comments on the request type', () => {
-    const argumentsBlock = getInterfaceBlock(
-      generatedSource,
+  it('renders request body comments on accessor args while using the shared request type directly', () => {
+    const accessorBlock = getInterfaceBlock(generatedSource, 'xml_comments');
+
+    expect(accessorBlock).toContain(
+      'readonly post_documented: (args?: CreateDocumentedRequest | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentedEnvelope>;'
+    );
+    expect(generatedSource).not.toContain(
       'xml_comments_post_documented_arguments'
     );
-    const requestBodyBlock = getInterfaceBlock(
-      generatedSource,
+    expect(generatedSource).not.toContain(
       'xml_comments_post_documented_request_body'
-    );
-
-    expect(argumentsBlock).toContain(
-      'body?: xml_comments_post_documented_request_body;'
-    );
-    expectMemberDocumentation(
-      argumentsBlock,
-      'body',
-      '/** Documented request body. */'
-    );
-    expect(
-      getInterfaceDocumentation(
-        generatedSource,
-        'xml_comments_post_documented_request_body'
-      )
-    ).toBe('/** Request schema described by XML comments. */');
-    expectMemberDocumentation(
-      requestBodyBlock,
-      'identifier',
-      '/** The request identifier. */'
-    );
-    expectMemberDocumentation(
-      requestBodyBlock,
-      'optionalLabel',
-      '/** An optional request label. */'
     );
   });
 
-  it('renders response comments on generated response types', () => {
-    expect(
-      getInterfaceDocumentation(
-        generatedSource,
-        'xml_comments_get_documented_response'
-      )
-    ).toBe('/** XML documented success response. */');
-    expect(
-      getInterfaceDocumentation(
-        generatedSource,
-        'xml_comments_post_documented_response'
-      )
-    ).toBe('/** XML documented create response. */');
-    expect(
-      getInterfaceDocumentation(
-        generatedSource,
-        'xml_comments_get_returns_only_response'
-      )
-    ).toBe('/** OK */');
+  it('uses shared response types directly on accessor signatures', () => {
+    const accessorBlock = getInterfaceBlock(generatedSource, 'xml_comments');
+
+    expect(accessorBlock).toContain(
+      'readonly get_documented: (args?: xml_comments_get_documented_arguments | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentedEnvelope>;'
+    );
+    expect(accessorBlock).toContain(
+      'readonly post_documented: (args?: CreateDocumentedRequest | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentedEnvelope>;'
+    );
+    expect(accessorBlock).toContain(
+      'readonly get_returns_only: (options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentedEnvelope>;'
+    );
+    expect(generatedSource).not.toContain(
+      'xml_comments_get_documented_response'
+    );
+    expect(generatedSource).not.toContain(
+      'xml_comments_post_documented_response'
+    );
+    expect(generatedSource).not.toContain(
+      'xml_comments_get_returns_only_response'
+    );
   });
 
   it('renders schema and property comments on generated schema types', () => {

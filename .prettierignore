@@ -51,5 +51,6 @@ temp/
 *.generated.*
 generated/
 test-results/
+src/assets/
 
 *.md

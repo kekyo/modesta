@@ -4,7 +4,7 @@
 // https://github.com/kekyo/modesta/
 
 import { createServer } from 'http';
-import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { basename, join, resolve } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
@@ -157,6 +157,15 @@ describe('CLI and format support', () => {
     expect(generatedSource).toContain(
       'export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSender<undefined> => {'
     );
+  });
+
+  it('does not emit asset sources as build outputs', async () => {
+    await expect(
+      stat(resolve(process.cwd(), 'dist/src/assets/runtime.d.ts'))
+    ).rejects.toThrow();
+    await expect(
+      stat(resolve(process.cwd(), 'dist/src/assets/runtime.d.ts.map'))
+    ).rejects.toThrow();
   });
 
   it('writes generated source to stdout when only the input path is provided', async () => {

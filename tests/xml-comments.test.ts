@@ -18,6 +18,7 @@ import {
   getInterfaceBlock,
   getInterfaceDocumentation,
   getTypeAliasDocumentation,
+  getTypeAliasStatement,
 } from './support/source-assertions';
 
 const xmlCommentsProject: SwaggerFixtureProject = {
@@ -434,10 +435,6 @@ describe('xml comments integration', () => {
       generatedSource,
       'xml_comments_post_documented_arguments'
     );
-    const requestBodyBlock = getInterfaceBlock(
-      generatedSource,
-      'xml_comments_post_documented_request_body'
-    );
 
     expect(argumentsBlock).toContain(
       'body?: xml_comments_post_documented_request_body;'
@@ -448,38 +445,36 @@ describe('xml comments integration', () => {
       '/** Documented request body. */'
     );
     expect(
-      getInterfaceDocumentation(
+      getTypeAliasDocumentation(
         generatedSource,
         'xml_comments_post_documented_request_body'
       )
     ).toBe('/** Request schema described by XML comments. */');
-    expectMemberDocumentation(
-      requestBodyBlock,
-      'identifier',
-      '/** The request identifier. */'
-    );
-    expectMemberDocumentation(
-      requestBodyBlock,
-      'optionalLabel',
-      '/** An optional request label. */'
+    expect(
+      getTypeAliasStatement(
+        generatedSource,
+        'xml_comments_post_documented_request_body'
+      )
+    ).toBe(
+      'export type xml_comments_post_documented_request_body = CreateDocumentedRequest;'
     );
   });
 
   it('renders response comments on generated response types', () => {
     expect(
-      getInterfaceDocumentation(
+      getTypeAliasDocumentation(
         generatedSource,
         'xml_comments_get_documented_response'
       )
     ).toBe('/** XML documented success response. */');
     expect(
-      getInterfaceDocumentation(
+      getTypeAliasDocumentation(
         generatedSource,
         'xml_comments_post_documented_response'
       )
     ).toBe('/** XML documented create response. */');
     expect(
-      getInterfaceDocumentation(
+      getTypeAliasDocumentation(
         generatedSource,
         'xml_comments_get_returns_only_response'
       )

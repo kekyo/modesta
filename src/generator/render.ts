@@ -108,10 +108,12 @@ const renderNamedSchemaDefinition = (
   context: OpenApiContext,
   schemaDefinition: SchemaDefinition
 ) => {
-  const schema = resolveSchemaObject(
-    context.document,
-    asRecord(context.componentSchemas[schemaDefinition.rawName])
-  );
+  const schema = asRecord(context.componentSchemas[schemaDefinition.rawName]);
+  if (schema == null) {
+    throw new Error(
+      `Could not resolve schema '${schemaDefinition.rawName}' for rendering.`
+    );
+  }
   return renderNamedTypeDefinition(
     context,
     schemaDefinition.typeName,
@@ -453,7 +455,18 @@ const renderNamedTypeDefinition = (
   schema: JsonRecord,
   description: string | undefined
 ) => {
-  const flattened = tryFlattenObjectSchema(context, schema, new Set<string>());
+  const referenceTypeExpression = getReferenceTypeExpression(context, schema);
+  if (referenceTypeExpression != null) {
+    return [
+      renderDocumentationComment(description),
+      `export type ${typeName} = ${referenceTypeExpression};`,
+    ].join('\n');
+  }
+
+  const flattened =
+    shouldPreserveAllOfReferences(schema) === false
+      ? tryFlattenObjectSchema(context, schema, new Set<string>())
+      : undefined;
   if (flattened != null) {
     const members = flattened.properties.map((property) =>
       renderInterfaceMember(
@@ -693,6 +706,89 @@ const getOperationArgumentMode = (operation: OperationDefinition) => {
 const getOperationResponseTypeExpression = (response: ResponseDefinition) =>
   response.schema == null ? 'void' : response.typeName;
 
+const getReferenceTypeExpression = (
+  context: OpenApiContext,
+  schema: JsonRecord
+) => {
+  const directReference = getDirectReference(schema);
+  if (directReference != null && isReferenceWrapperSchema(schema)) {
+    return resolveReferenceTypeName(context, directReference);
+  }
+
+  const allOfReference = getSingleReferenceFromAllOf(schema);
+  if (allOfReference != null && isAllOfReferenceWrapperSchema(schema)) {
+    return resolveReferenceTypeName(context, allOfReference);
+  }
+
+  return undefined;
+};
+
+const shouldPreserveAllOfReferences = (schema: JsonRecord) => {
+  const allOf = asArray(schema.allOf);
+  if (allOf == null) {
+    return false;
+  }
+
+  return allOf.some((entry) => {
+    const entryRecord = asRecord(entry);
+    return (
+      entryRecord != null &&
+      (isReferenceWrapperSchema(entryRecord) ||
+        isAllOfReferenceWrapperSchema(entryRecord))
+    );
+  });
+};
+
+const getDirectAllOfObjectShape = (
+  schema: JsonRecord
+): JsonRecord | undefined => {
+  const properties = getRecord(schema, 'properties');
+  if (properties == null && schema.additionalProperties == null) {
+    return undefined;
+  }
+
+  const directShape: JsonRecord = {
+    additionalProperties: schema.additionalProperties,
+    properties,
+  };
+  const required = asArray(schema.required);
+  if (required != null) {
+    directShape.required = required;
+  }
+  if (getString(schema, 'type') === 'object') {
+    directShape.type = 'object';
+  }
+
+  return directShape;
+};
+
+const renderAllOfTypeExpression = (
+  context: OpenApiContext,
+  schema: JsonRecord,
+  indentLevel: number
+) => {
+  const allOf = asArray(schema.allOf);
+  if (allOf == null) {
+    throw new Error('Could not resolve allOf schema entries.');
+  }
+
+  const expressions = allOf.map((entry) => {
+    const entryRecord = asRecord(entry);
+    if (entryRecord == null) {
+      throw new Error('Could not resolve allOf schema entry.');
+    }
+    return renderTypeExpression(context, entryRecord, indentLevel);
+  });
+  const directObjectShape = getDirectAllOfObjectShape(schema);
+  if (directObjectShape != null) {
+    expressions.push(
+      renderTypeExpression(context, directObjectShape, indentLevel)
+    );
+  }
+
+  return expressions.join(' & ');
+};
+
 const renderTypeExpression = (
   context: OpenApiContext,
   schema: JsonRecord,
@@ -706,31 +802,24 @@ const renderTypeExpression = (
 
   const nullable = getBoolean(schema, 'nullable') ?? false;
   let coreType: string;
-  const directReference = getDirectReference(schema);
-  const allOfReference = getSingleReferenceFromAllOf(schema);
+  const referenceTypeExpression = getReferenceTypeExpression(context, schema);
 
-  if (directReference != null && isReferenceWrapperSchema(schema)) {
-    coreType = resolveReferenceTypeName(context, directReference);
-  } else if (allOfReference != null && isAllOfReferenceWrapperSchema(schema)) {
-    coreType = resolveReferenceTypeName(context, allOfReference);
+  if (referenceTypeExpression != null) {
+    coreType = referenceTypeExpression;
   } else if (asArray(schema.allOf) != null) {
-    const flattened = tryFlattenObjectSchema(
-      context,
-      schema,
-      new Set<string>()
-    );
-    if (flattened != null) {
-      coreType = renderInlineObjectType(flattened, indentLevel);
+    if (shouldPreserveAllOfReferences(schema)) {
+      coreType = renderAllOfTypeExpression(context, schema, indentLevel);
     } else {
-      coreType = asArray(schema.allOf)!
-        .map((entry) =>
-          renderTypeExpression(
-            context,
-            resolveSchemaObject(context.document, asRecord(entry)),
-            indentLevel
-          )
-        )
-        .join(' & ');
+      const flattened = tryFlattenObjectSchema(
+        context,
+        schema,
+        new Set<string>()
+      );
+      if (flattened != null) {
+        coreType = renderInlineObjectType(flattened, indentLevel);
+      } else {
+        coreType = renderAllOfTypeExpression(context, schema, indentLevel);
+      }
     }
   } else if (asArray(schema.enum) != null) {
     coreType = renderEnumType(asArray(schema.enum)!);
@@ -750,10 +839,7 @@ const renderTypeExpression = (
       case 'array':
         coreType = `Array<${renderTypeExpression(
           context,
-          resolveSchemaObject(
-            context.document,
-            getRequiredRecord(schema, 'items', 'array items')
-          ),
+          getRequiredRecord(schema, 'items', 'array items'),
           indentLevel
         )}>`;
         break;

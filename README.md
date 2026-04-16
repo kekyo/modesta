@@ -260,7 +260,7 @@ const generatedFromRemote = await generateAccessorSourceFromFile({
 ### Reference Resolution
 
 - Only local `$ref` references are supported
-- `#/components/schemas/...` references are reused as shared generated types
+- `#/components/schemas/...` references are reused as shared generated types, including direct aliases, array items, and reusable `allOf` members
 - It prioritizes `application/json`, then `+json`, then the first available content entry
 
 ---
@@ -430,7 +430,7 @@ OpenAPI schemas are converted to TypeScript roughly as follows:
 - `nullable: true` becomes `| null`
 - Successful responses without content become `void`
 - `additionalProperties` becomes an index signature
-- `allOf` is flattened into an object when possible, or emitted as an intersection when not
+- `allOf` is flattened into an object when possible, but reusable schema references are kept as intersections instead of being expanded inline
 
 Generated files start with a header like this:
 

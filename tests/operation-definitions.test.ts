@@ -114,24 +114,21 @@ describe('operation definition generation', () => {
   });
 
   it('separates body parameter definitions', () => {
-    const requestBodyBlock = getInterfaceBlock(
-      generatedSource,
-      'CreateItem_post_request_body'
-    );
-
-    expect(requestBodyBlock).toContain('name: string;');
+    expect(
+      getTypeAliasStatement(generatedSource, 'CreateItem_post_request_body')
+    ).toBe('export type CreateItem_post_request_body = CreateItemRequest;');
   });
 
-  it('separates array return type definitions', () => {
-    const listItemsResponse = getTypeAliasStatement(
-      generatedSource,
-      'ListItems_get_response'
-    );
+  it('reuses shared schema references for direct response definitions', () => {
+    expect(
+      getTypeAliasStatement(generatedSource, 'GetRouteValue_get_response')
+    ).toBe('export type GetRouteValue_get_response = SimpleRecord;');
+  });
 
-    expect(listItemsResponse).toContain('Array<{');
-    expect(generatedSource).toMatch(
-      /export type ListItems_get_response = Array<\{[\s\S]*id: string;[\s\S]*source: string;[\s\S]*\}>;/u
-    );
+  it('reuses shared schema references for array return type definitions', () => {
+    expect(
+      getTypeAliasStatement(generatedSource, 'ListItems_get_response')
+    ).toBe('export type ListItems_get_response = Array<SimpleRecord>;');
   });
 
   it('separates dictionary return type definitions', () => {

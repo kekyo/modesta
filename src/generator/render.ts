@@ -97,8 +97,14 @@ export const renderApiDefinition = (
 
   for (const accessorGroup of api.accessorGroups) {
     for (const operation of accessorGroup.operations) {
-      push(renderOperationDefinition(context, operation));
-      push();
+      const renderedOperationDefinition = renderOperationDefinition(
+        context,
+        operation
+      );
+      if (renderedOperationDefinition.length > 0) {
+        push(renderedOperationDefinition);
+        push();
+      }
     }
 
     push(renderAccessorInterfaces(context, accessorGroup));
@@ -362,7 +368,15 @@ const renderAccessorInterface = (
     withContext
       ? `${accessorGroup.interfaceName} accessor definition that requires per-call context values.`
       : `${accessorGroup.interfaceName} accessor definition.`,
-    members
+    members,
+    withContext
+      ? [
+          {
+            description: 'Per-call context value type passed to the sender.',
+            name: 'TAccessorContext',
+          },
+        ]
+      : undefined
   );
 };
 

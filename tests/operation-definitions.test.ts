@@ -1018,6 +1018,24 @@ describe('operation definition generation', () => {
     expect(edgeCaseGeneratedSource).not.toContain(
       'CreateNumberList_post_request_envelope'
     );
+    expect(edgeCaseGeneratedSource).toContain(
+      [
+        '  } as CreateItem | CreateItem_with_context<TAccessorContext>;',
+        '}',
+        '',
+        '/** CreateNumberList accessor definition. */',
+      ].join('\n')
+    );
+    expect(edgeCaseGeneratedSource).not.toContain(
+      [
+        '  } as CreateItem | CreateItem_with_context<TAccessorContext>;',
+        '}',
+        '',
+        '',
+        '',
+        '/** CreateNumberList accessor definition. */',
+      ].join('\n')
+    );
 
     const sender = vi.fn(async (request: unknown) => request);
     const accessor =

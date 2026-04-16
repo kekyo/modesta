@@ -338,6 +338,16 @@ describe('xml comments integration', () => {
         ' */',
       ].join('\n')
     );
+    expect(
+      getInterfaceDocumentation(generatedSource, 'xml_comments_with_context')
+    ).toBe(
+      [
+        '/**',
+        ' * xml_comments accessor definition that requires per-call context values.',
+        ' * @typeParam TAccessorContext Per-call context value type passed to the sender.',
+        ' */',
+      ].join('\n')
+    );
 
     expect(
       getTypeAliasDocumentation(generatedSource, 'AccessorSenderWithoutContext')

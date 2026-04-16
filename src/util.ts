@@ -192,6 +192,28 @@ export const normalizeTypeName = (value: string, fallback: string) =>
 export const normalizeValueName = (value: string, fallback: string) =>
   normalizeIdentifier(value, fallback);
 
+export const normalizeParameterName = (value: string, fallback: string) => {
+  const unsafeSegments = value
+    .split(/[^A-Za-z0-9_$]+/gu)
+    .filter((segment) => segment.length > 0);
+  if (unsafeSegments.length === 0) {
+    return sanitizeIdentifier(fallback);
+  }
+  if (
+    unsafeSegments.length === 1 &&
+    /^[A-Za-z_$][A-Za-z0-9_$]*$/u.test(value)
+  ) {
+    return sanitizeIdentifier(value);
+  }
+
+  const [firstSegment, ...remainingSegments] = unsafeSegments;
+  const normalized = [
+    lowerFirstCharacter(firstSegment),
+    ...remainingSegments.map(capitalizeSegment),
+  ].join('');
+  return sanitizeIdentifier(normalized.length > 0 ? normalized : fallback);
+};
+
 export const normalizeIdentifier = (value: string, fallback: string) => {
   const normalized = value
     .replace(/[^A-Za-z0-9_$]+/gu, '_')
@@ -207,6 +229,20 @@ export const sanitizeIdentifier = (value: string) => {
     .replace(/^[^A-Za-z_$]+/u, '_$&')
     .replace(/[^A-Za-z0-9_$]/gu, '_');
   return reservedWords.has(normalized) ? `_${normalized}` : normalized;
+};
+
+const lowerFirstCharacter = (value: string) => {
+  if (value.length === 0) {
+    return value;
+  }
+  return `${value[0].toLowerCase()}${value.slice(1)}`;
+};
+
+const capitalizeSegment = (value: string) => {
+  if (value.length === 0) {
+    return value;
+  }
+  return `${value[0].toUpperCase()}${value.slice(1).toLowerCase()}`;
 };
 
 export const renderPropertyName = (name: string) => {

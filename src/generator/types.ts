@@ -22,7 +22,9 @@ export interface SchemaDefinition {
 export interface ParameterDefinition {
   description: string | undefined;
   location: 'path' | 'query' | 'header';
+  duplicatedPropertyName: string | undefined;
   name: string;
+  originalPropertyName: string;
   propertyName: string;
   required: boolean;
   schema: JsonRecord;
@@ -103,4 +105,5 @@ export interface OpenApiContext {
   componentSchemas: JsonRecord;
   document: JsonRecord;
   naming: NamingContext;
+  warningSink: ((message: string) => void) | undefined;
 }

@@ -238,6 +238,8 @@ describe('xml comments integration', () => {
         '/**',
         ' * Creates a documented response.',
         ' * @param args Optional arguments for POST /xml-comments/documented.',
+        ' * Request body payload is passed directly as args.',
+        ' * Request body: Documented request body.',
         ' * @param options Additional accessor call options without per-call context.',
         ' * @returns XML documented create response.',
         ' */',
@@ -417,29 +419,26 @@ describe('xml comments integration', () => {
   });
 
   it('renders parameter comments on generated parameter members', () => {
-    const queryParametersBlock = getInterfaceBlock(
+    const argumentsBlock = getInterfaceBlock(
       generatedSource,
-      'xml_comments_get_documented_query_parameters'
+      'xml_comments_get_documented_arguments'
     );
-    expect(queryParametersBlock).toContain('filter?: string;');
+    expect(argumentsBlock).toContain('filter?: string;');
     expectMemberDocumentation(
-      queryParametersBlock,
+      argumentsBlock,
       'filter',
       '/** Filter text from XML parameter comments. */'
     );
   });
 
-  it('renders body parameter comments on args.body while using the shared request type directly', () => {
-    const argumentsBlock = getInterfaceBlock(
-      generatedSource,
-      'xml_comments_post_documented_arguments'
-    );
+  it('renders request body comments on accessor args while using the shared request type directly', () => {
+    const accessorBlock = getInterfaceBlock(generatedSource, 'xml_comments');
 
-    expect(argumentsBlock).toContain('body?: CreateDocumentedRequest;');
-    expectMemberDocumentation(
-      argumentsBlock,
-      'body',
-      '/** Documented request body. */'
+    expect(accessorBlock).toContain(
+      'readonly post_documented: (args?: CreateDocumentedRequest | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentedEnvelope>;'
+    );
+    expect(generatedSource).not.toContain(
+      'xml_comments_post_documented_arguments'
     );
     expect(generatedSource).not.toContain(
       'xml_comments_post_documented_request_body'
@@ -453,7 +452,7 @@ describe('xml comments integration', () => {
       'readonly get_documented: (args?: xml_comments_get_documented_arguments | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentedEnvelope>;'
     );
     expect(accessorBlock).toContain(
-      'readonly post_documented: (args?: xml_comments_post_documented_arguments | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentedEnvelope>;'
+      'readonly post_documented: (args?: CreateDocumentedRequest | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentedEnvelope>;'
     );
     expect(accessorBlock).toContain(
       'readonly get_returns_only: (options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentedEnvelope>;'

@@ -447,7 +447,7 @@ describe('CLI and format support', () => {
       expect(fromYaml).toBe(fromJson);
       expect(fromJson).toContain('export interface LookupSummaries {');
       expect(fromJson).toContain(
-        'readonly post: (args: LookupSummaries_post_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<LookupSummaries_post_response>;'
+        'readonly post: (args: LookupRequest, options?: AccessorOptionsWithoutContext | undefined) => Promise<LookupSummaries_post_response>;'
       );
       expect(fromJson).toContain('[key: string]: SummaryItem;');
       expect(fromJson).toContain('recordedAt: string;');

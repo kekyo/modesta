@@ -39,9 +39,17 @@ const operationProject: SwaggerFixtureProject = {
       '    TypedResults.Ok(new SimpleRecord(apiKey, "header")))',
       '    .WithName("GetHeaderValue");',
       '',
+      'app.MapGet("/combined/{id}", ([FromRoute] string id, [FromQuery(Name = "page-size")] int pageSize, [FromHeader(Name = "x-api-key")] string apiKey) =>',
+      '    TypedResults.Ok(new SimpleRecord($"{id}:{pageSize}:{apiKey}", "combined")))',
+      '    .WithName("GetCombinedValue");',
+      '',
       'app.MapPost("/body", ([FromBody] CreateItemRequest request) =>',
       '    TypedResults.Ok(new SimpleRecord(request.Name, "body")))',
       '    .WithName("CreateItem");',
+      '',
+      'app.MapPost("/combined/{id}", ([FromRoute] string id, [FromQuery(Name = "page-size")] int pageSize, [FromHeader(Name = "x-api-key")] string apiKey, [FromBody] CreateItemRequest request) =>',
+      '    TypedResults.Ok(new SimpleRecord($"{id}:{pageSize}:{apiKey}:{request.Name}", "combined-body")))',
+      '    .WithName("CreateCombinedItem");',
       '',
       'app.MapGet("/array", () =>',
       '    TypedResults.Ok(new[]',
@@ -92,32 +100,48 @@ describe('operation definition generation', () => {
     expect(argumentsBlock).not.toContain('pathParameters:');
   });
 
-  it('separates query attribute definitions with renamed names', () => {
-    const queryParametersBlock = getInterfaceBlock(
-      generatedSource,
-      'GetPage_get_query_parameters'
-    );
-
-    expect(queryParametersBlock).toContain("'page-size': number;");
-  });
-
-  it('separates header attribute definitions with renamed names', () => {
-    const headerParametersBlock = getInterfaceBlock(
-      generatedSource,
-      'GetHeaderValue_get_header_parameters'
-    );
-
-    expect(headerParametersBlock).toContain("'x-api-key': string;");
-  });
-
-  it('uses shared schema types directly for body parameters', () => {
+  it('flattens query parameters and normalizes unsafe characters', () => {
     const argumentsBlock = getInterfaceBlock(
       generatedSource,
-      'CreateItem_post_arguments'
+      'GetPage_get_arguments'
     );
 
-    expect(argumentsBlock).toContain('body: CreateItemRequest;');
+    expect(argumentsBlock).toMatch(/pageSize\??: number;/);
+    expect(generatedSource).not.toContain('GetPage_get_query_parameters');
+  });
+
+  it('flattens header parameters and normalizes unsafe characters', () => {
+    const argumentsBlock = getInterfaceBlock(
+      generatedSource,
+      'GetHeaderValue_get_arguments'
+    );
+
+    expect(argumentsBlock).toMatch(/xApiKey\??: string;/);
+    expect(generatedSource).not.toContain(
+      'GetHeaderValue_get_header_parameters'
+    );
+  });
+
+  it('uses the shared body type directly when no flattened parameters are present', () => {
+    expect(generatedSource).toContain(
+      'readonly post: (args: CreateItemRequest, options?: AccessorOptionsWithoutContext | undefined) => Promise<SimpleRecord>;'
+    );
+    expect(generatedSource).not.toContain('CreateItem_post_arguments');
     expect(generatedSource).not.toContain('CreateItem_post_request_body');
+  });
+
+  it('uses an intersection type when flattened parameters and a body coexist', () => {
+    const argumentsBlock = getInterfaceBlock(
+      generatedSource,
+      'CreateCombinedItem_post_arguments'
+    );
+
+    expect(argumentsBlock).toContain('id: string;');
+    expect(argumentsBlock).toMatch(/pageSize\??: number;/);
+    expect(argumentsBlock).toMatch(/xApiKey\??: string;/);
+    expect(generatedSource).toContain(
+      'readonly post: (args: CreateItemRequest & CreateCombinedItem_post_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<SimpleRecord>;'
+    );
   });
 
   it('uses shared schema types directly for direct response definitions', () => {
@@ -230,9 +254,7 @@ describe('operation definition generation', () => {
     const accessor = generatedModule.create_GetPage_accessor(sender);
 
     await accessor.get({
-      queryParameters: {
-        'page-size': 20,
-      },
+      pageSize: 20,
     });
 
     expect(sender).toHaveBeenCalledWith(
@@ -283,9 +305,7 @@ describe('operation definition generation', () => {
     const accessor = generatedModule.create_GetHeaderValue_accessor(sender);
 
     await accessor.get({
-      headerParameters: {
-        'x-api-key': 'secret',
-      },
+      xApiKey: 'secret',
     });
 
     expect(sender).toHaveBeenCalledWith(
@@ -304,14 +324,38 @@ describe('operation definition generation', () => {
     );
   });
 
+  it('builds sender descriptors for combined path, query, and header parameters', async () => {
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor = generatedModule.create_GetCombinedValue_accessor(sender);
+
+    await accessor.get({
+      id: '42',
+      pageSize: 20,
+      xApiKey: 'secret',
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'GetCombinedValue.get',
+        method: 'GET',
+        url: '/combined/42?page-size=20',
+        headers: {
+          'x-api-key': 'secret',
+          accept: 'application/json',
+        },
+        body: undefined,
+      },
+      undefined,
+      undefined
+    );
+  });
+
   it('builds sender descriptors for body parameters', async () => {
     const sender = vi.fn(async (request: unknown) => request);
     const accessor = generatedModule.create_CreateItem_accessor(sender);
 
     await accessor.post({
-      body: {
-        name: 'alpha',
-      },
+      name: 'alpha',
     });
 
     expect(sender).toHaveBeenCalledWith(
@@ -341,9 +385,7 @@ describe('operation definition generation', () => {
 
     await accessor.post(
       {
-        body: {
-          name: 'alpha',
-        },
+        name: 'alpha',
       },
       {
         context: {
@@ -375,6 +417,36 @@ describe('operation definition generation', () => {
         },
         signal,
       }
+    );
+  });
+
+  it('builds sender descriptors for combined path, query, header, and body parameters', async () => {
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor = generatedModule.create_CreateCombinedItem_accessor(sender);
+
+    await accessor.post({
+      id: '42',
+      pageSize: 20,
+      xApiKey: 'secret',
+      name: 'alpha',
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'CreateCombinedItem.post',
+        method: 'POST',
+        url: '/combined/42?page-size=20',
+        headers: {
+          'x-api-key': 'secret',
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: {
+          name: 'alpha',
+        },
+      },
+      undefined,
+      undefined
     );
   });
 
@@ -483,57 +555,96 @@ describe('operation definition generation', () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(1);
   });
 
-  it('fails when flattened path parameter names collide with request body members', () => {
-    expect(() =>
-      generateAccessorSource({
-        document: {
-          openapi: '3.0.3',
-          info: {
-            title: 'Argument collision',
-            version: '1.0.0',
-          },
-          paths: {
-            '/items/{body}': {
-              post: {
-                operationId: 'CreateItem',
-                parameters: [
-                  {
-                    in: 'path',
-                    name: 'body',
-                    required: true,
-                    schema: {
-                      type: 'string',
-                    },
-                  },
-                ],
-                requestBody: {
+  it('retains underscores in normalized parameter names', () => {
+    const generated = generateAccessorSource({
+      document: {
+        openapi: '3.0.3',
+        info: {
+          title: 'Underscore parameters',
+          version: '1.0.0',
+        },
+        paths: {
+          '/users/{user_id}': {
+            get: {
+              operationId: 'GetUser',
+              parameters: [
+                {
+                  in: 'path',
+                  name: 'user_id',
                   required: true,
+                  schema: {
+                    type: 'string',
+                  },
+                },
+              ],
+              responses: {
+                '200': {
+                  description: 'OK',
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const argumentsBlock = getInterfaceBlock(
+      generated,
+      'GetUser_get_arguments'
+    );
+    expect(argumentsBlock).toContain('user_id: string;');
+  });
+
+  it('renames duplicated parameter-only names and emits warnings without a request body', async () => {
+    const warnings: string[] = [];
+    const generated = generateAccessorSource({
+      document: {
+        openapi: '3.0.3',
+        info: {
+          title: 'Parameter-only collision',
+          version: '1.0.0',
+        },
+        paths: {
+          '/items/{id}': {
+            get: {
+              operationId: 'GetDuplicateParameters',
+              parameters: [
+                {
+                  in: 'path',
+                  name: 'id',
+                  required: true,
+                  schema: {
+                    type: 'string',
+                  },
+                },
+                {
+                  in: 'query',
+                  name: 'id',
+                  required: false,
+                  schema: {
+                    type: 'string',
+                  },
+                },
+                {
+                  in: 'header',
+                  name: 'id',
+                  required: false,
+                  schema: {
+                    type: 'string',
+                  },
+                },
+              ],
+              responses: {
+                '200': {
+                  description: 'OK',
                   content: {
                     'application/json': {
                       schema: {
                         type: 'object',
-                        required: ['name'],
+                        required: ['value'],
                         properties: {
-                          name: {
+                          value: {
                             type: 'string',
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-                responses: {
-                  '200': {
-                    description: 'OK',
-                    content: {
-                      'application/json': {
-                        schema: {
-                          type: 'object',
-                          required: ['value'],
-                          properties: {
-                            value: {
-                              type: 'string',
-                            },
                           },
                         },
                       },
@@ -544,9 +655,420 @@ describe('operation definition generation', () => {
             },
           },
         },
-      })
-    ).toThrow(
-      /Generated argument member 'body' in accessor 'CreateItem' method 'post' is ambiguous/
+      },
+      warningSink: (message) => {
+        warnings.push(message);
+      },
+    });
+
+    const argumentsBlock = getInterfaceBlock(
+      generated,
+      'GetDuplicateParameters_get_arguments'
+    );
+    expect(argumentsBlock).toContain('path_id: string;');
+    expect(argumentsBlock).toContain('query_id?: string;');
+    expect(argumentsBlock).toContain('header_id?: string;');
+    expect(argumentsBlock).toContain("@remarks Duplicated argument name: 'id'");
+    expect(generated).toContain(
+      'readonly get: (args: GetDuplicateParameters_get_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<GetDuplicateParameters_get_response>;'
+    );
+    expect(warnings).toHaveLength(3);
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        "Renamed path parameter 'id' to 'path_id' in accessor 'GetDuplicateParameters' method 'get' because generated argument name 'id' was duplicated.",
+        "Renamed query parameter 'id' to 'query_id' in accessor 'GetDuplicateParameters' method 'get' because generated argument name 'id' was duplicated.",
+        "Renamed header parameter 'id' to 'header_id' in accessor 'GetDuplicateParameters' method 'get' because generated argument name 'id' was duplicated.",
+      ])
+    );
+
+    const generatedModuleWithDuplicates =
+      await transpileGeneratedSource(generated);
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor =
+      generatedModuleWithDuplicates.create_GetDuplicateParameters_accessor(
+        sender
+      );
+
+    await accessor.get({
+      path_id: 'route-42',
+      query_id: 'query-42',
+      header_id: 'header-42',
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'GetDuplicateParameters.get',
+        method: 'GET',
+        url: '/items/route-42?id=query-42',
+        headers: {
+          id: 'header-42',
+          accept: 'application/json',
+        },
+        body: undefined,
+      },
+      undefined,
+      undefined
+    );
+  });
+
+  it('renames parameters whose normalized names collide and preserves each wire name', async () => {
+    const warnings: string[] = [];
+    const generated = generateAccessorSource({
+      document: {
+        openapi: '3.0.3',
+        info: {
+          title: 'Normalized collision',
+          version: '1.0.0',
+        },
+        paths: {
+          '/normalized-collision': {
+            get: {
+              operationId: 'GetNormalizedCollision',
+              parameters: [
+                {
+                  in: 'query',
+                  name: 'x-api-key',
+                  required: false,
+                  schema: {
+                    type: 'string',
+                  },
+                },
+                {
+                  in: 'header',
+                  name: 'x.api.key',
+                  required: false,
+                  schema: {
+                    type: 'string',
+                  },
+                },
+              ],
+              responses: {
+                '200': {
+                  description: 'OK',
+                  content: {
+                    'application/json': {
+                      schema: {
+                        type: 'object',
+                        required: ['value'],
+                        properties: {
+                          value: {
+                            type: 'string',
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      warningSink: (message) => {
+        warnings.push(message);
+      },
+    });
+
+    const argumentsBlock = getInterfaceBlock(
+      generated,
+      'GetNormalizedCollision_get_arguments'
+    );
+    expect(argumentsBlock).toContain('query_xApiKey?: string;');
+    expect(argumentsBlock).toContain('header_xApiKey?: string;');
+    expect(argumentsBlock).toContain(
+      "@remarks Duplicated argument name: 'xApiKey'"
+    );
+    expect(warnings).toHaveLength(2);
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        "Renamed query parameter 'x-api-key' to 'query_xApiKey' in accessor 'GetNormalizedCollision' method 'get' because generated argument name 'xApiKey' was duplicated.",
+        "Renamed header parameter 'x.api.key' to 'header_xApiKey' in accessor 'GetNormalizedCollision' method 'get' because generated argument name 'xApiKey' was duplicated.",
+      ])
+    );
+
+    const generatedModuleWithNormalizedCollision =
+      await transpileGeneratedSource(generated);
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor =
+      generatedModuleWithNormalizedCollision.create_GetNormalizedCollision_accessor(
+        sender
+      );
+
+    await accessor.get({
+      query_xApiKey: 'query-key',
+      header_xApiKey: 'header-key',
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'GetNormalizedCollision.get',
+        method: 'GET',
+        url: '/normalized-collision?x-api-key=query-key',
+        headers: {
+          'x.api.key': 'header-key',
+          accept: 'application/json',
+        },
+        body: undefined,
+      },
+      undefined,
+      undefined
+    );
+  });
+
+  it('does not rename parameters when normalization keeps their names distinct', async () => {
+    const warnings: string[] = [];
+    const generated = generateAccessorSource({
+      document: {
+        openapi: '3.0.3',
+        info: {
+          title: 'Normalized distinct parameters',
+          version: '1.0.0',
+        },
+        paths: {
+          '/normalized-distinct/{user_id}': {
+            get: {
+              operationId: 'GetNormalizedDistinct',
+              parameters: [
+                {
+                  in: 'path',
+                  name: 'user_id',
+                  required: true,
+                  schema: {
+                    type: 'string',
+                  },
+                },
+                {
+                  in: 'query',
+                  name: 'user-id',
+                  required: false,
+                  schema: {
+                    type: 'string',
+                  },
+                },
+                {
+                  in: 'header',
+                  name: 'tenant.id',
+                  required: false,
+                  schema: {
+                    type: 'string',
+                  },
+                },
+              ],
+              responses: {
+                '200': {
+                  description: 'OK',
+                  content: {
+                    'application/json': {
+                      schema: {
+                        type: 'object',
+                        required: ['value'],
+                        properties: {
+                          value: {
+                            type: 'string',
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      warningSink: (message) => {
+        warnings.push(message);
+      },
+    });
+
+    const argumentsBlock = getInterfaceBlock(
+      generated,
+      'GetNormalizedDistinct_get_arguments'
+    );
+    expect(argumentsBlock).toContain('user_id: string;');
+    expect(argumentsBlock).toContain('userId?: string;');
+    expect(argumentsBlock).toContain('tenantId?: string;');
+    expect(argumentsBlock).not.toContain('path_user_id');
+    expect(argumentsBlock).not.toContain('query_userId');
+    expect(argumentsBlock).not.toContain('header_tenantId');
+    expect(argumentsBlock).not.toContain('@remarks Duplicated argument name');
+    expect(warnings).toEqual([]);
+
+    const generatedModuleWithDistinctParameters =
+      await transpileGeneratedSource(generated);
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor =
+      generatedModuleWithDistinctParameters.create_GetNormalizedDistinct_accessor(
+        sender
+      );
+
+    await accessor.get({
+      user_id: 'route-42',
+      userId: 'query-42',
+      tenantId: 'header-42',
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'GetNormalizedDistinct.get',
+        method: 'GET',
+        url: '/normalized-distinct/route-42?user-id=query-42',
+        headers: {
+          'tenant.id': 'header-42',
+          accept: 'application/json',
+        },
+        body: undefined,
+      },
+      undefined,
+      undefined
+    );
+  });
+
+  it('renames duplicated flattened parameter names, keeps wire names, and excludes them from the request body', async () => {
+    const warnings: string[] = [];
+    const generated = generateAccessorSource({
+      document: {
+        openapi: '3.0.3',
+        info: {
+          title: 'Argument collision',
+          version: '1.0.0',
+        },
+        paths: {
+          '/items/{id}': {
+            post: {
+              operationId: 'CreateItem',
+              parameters: [
+                {
+                  in: 'path',
+                  name: 'id',
+                  required: true,
+                  schema: {
+                    type: 'string',
+                  },
+                },
+                {
+                  in: 'query',
+                  name: 'x-api-key',
+                  required: false,
+                  schema: {
+                    type: 'string',
+                  },
+                },
+                {
+                  in: 'header',
+                  name: 'x-api-key',
+                  required: false,
+                  schema: {
+                    type: 'string',
+                  },
+                },
+              ],
+              requestBody: {
+                required: true,
+                description: 'JSON request body.',
+                content: {
+                  'application/json': {
+                    schema: {
+                      type: 'object',
+                      required: ['id', 'xApiKey', 'name'],
+                      properties: {
+                        id: {
+                          type: 'string',
+                        },
+                        xApiKey: {
+                          type: 'string',
+                        },
+                        name: {
+                          type: 'string',
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              responses: {
+                '200': {
+                  description: 'OK',
+                  content: {
+                    'application/json': {
+                      schema: {
+                        type: 'object',
+                        required: ['value'],
+                        properties: {
+                          value: {
+                            type: 'string',
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      warningSink: (message) => {
+        warnings.push(message);
+      },
+    });
+
+    const argumentsBlock = getInterfaceBlock(
+      generated,
+      'CreateItem_post_arguments'
+    );
+    expect(argumentsBlock).toContain('path_id: string;');
+    expect(argumentsBlock).toContain('query_xApiKey?: string;');
+    expect(argumentsBlock).toContain('header_xApiKey?: string;');
+    expect(argumentsBlock).toContain("@remarks Duplicated argument name: 'id'");
+    expect(argumentsBlock).toContain(
+      "@remarks Duplicated argument name: 'xApiKey'"
+    );
+    expect(generated).toContain(
+      'readonly post: (args: CreateItem_post_request_body & CreateItem_post_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<CreateItem_post_response>;'
+    );
+    expect(warnings).toHaveLength(3);
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        "Renamed path parameter 'id' to 'path_id' in accessor 'CreateItem' method 'post' because generated argument name 'id' was duplicated.",
+        "Renamed query parameter 'x-api-key' to 'query_xApiKey' in accessor 'CreateItem' method 'post' because generated argument name 'xApiKey' was duplicated.",
+        "Renamed header parameter 'x-api-key' to 'header_xApiKey' in accessor 'CreateItem' method 'post' because generated argument name 'xApiKey' was duplicated.",
+      ])
+    );
+
+    const generatedModuleWithCollisions =
+      await transpileGeneratedSource(generated);
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor =
+      generatedModuleWithCollisions.create_CreateItem_accessor(sender);
+
+    await accessor.post({
+      id: 'body-42',
+      xApiKey: 'body-key',
+      name: 'alpha',
+      path_id: 'route-42',
+      query_xApiKey: 'query-key',
+      header_xApiKey: 'header-key',
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'CreateItem.post',
+        method: 'POST',
+        url: '/items/route-42?x-api-key=query-key',
+        headers: {
+          'x-api-key': 'header-key',
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: {
+          id: 'body-42',
+          xApiKey: 'body-key',
+          name: 'alpha',
+        },
+      },
+      undefined,
+      undefined
     );
   });
 

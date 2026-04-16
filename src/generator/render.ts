@@ -129,32 +129,6 @@ const renderOperationDefinition = (
 ) => {
   const sections: string[] = [];
 
-  if (operation.queryParameters.length > 0) {
-    sections.push(
-      renderParameterGroupDefinition(
-        context,
-        operation.queryParametersTypeName ??
-          fail(
-            `Missing query parameter type name for ${operation.namingSource}.`
-          ),
-        'Query parameters definition.',
-        operation.queryParameters
-      )
-    );
-  }
-  if (operation.headerParameters.length > 0) {
-    sections.push(
-      renderParameterGroupDefinition(
-        context,
-        operation.headerParametersTypeName ??
-          fail(
-            `Missing header parameter type name for ${operation.namingSource}.`
-          ),
-        'Header parameters definition.',
-        operation.headerParameters
-      )
-    );
-  }
   if (
     operation.requestBody != null &&
     shouldRenderOperationSchemaDefinition(context, operation.requestBody.schema)
@@ -170,64 +144,30 @@ const renderOperationDefinition = (
   }
 
   const argumentMembers: string[] = [];
-  if (operation.pathParameters.length > 0) {
-    for (const parameter of operation.pathParameters) {
-      argumentMembers.push(
-        renderInterfaceMember(
-          parameter.propertyName,
-          renderTypeExpression(context, parameter.schema, 1),
-          parameter.required === false,
-          parameter.description
-        )
-      );
-    }
-  }
-  if (operation.queryParameters.length > 0) {
+  for (const parameter of getOperationParameters(operation)) {
     argumentMembers.push(
       renderInterfaceMember(
-        'queryParameters',
-        operation.queryParametersTypeName ??
-          fail(
-            `Missing query parameter type name for ${operation.namingSource}.`
-          ),
-        operation.queryParameters.some((parameter) => parameter.required) ===
-          false,
-        'Query parameter values.'
-      )
-    );
-  }
-  if (operation.headerParameters.length > 0) {
-    argumentMembers.push(
-      renderInterfaceMember(
-        'headerParameters',
-        operation.headerParametersTypeName ??
-          fail(
-            `Missing header parameter type name for ${operation.namingSource}.`
-          ),
-        operation.headerParameters.some((parameter) => parameter.required) ===
-          false,
-        'Header parameter values.'
-      )
-    );
-  }
-  if (operation.requestBody != null) {
-    argumentMembers.push(
-      renderInterfaceMember(
-        'body',
-        getOperationRequestBodyTypeExpression(context, operation.requestBody),
-        operation.requestBody.required === false,
-        operation.requestBody.parameterDescription ?? 'JSON request body.'
+        parameter.propertyName,
+        renderTypeExpression(context, parameter.schema, 1),
+        parameter.required === false,
+        parameter.description,
+        true,
+        parameter.duplicatedPropertyName != null
+          ? `Duplicated argument name: '${parameter.duplicatedPropertyName}'`
+          : undefined
       )
     );
   }
 
-  sections.push(
-    renderInterfaceDefinition(
-      operation.argumentsTypeName,
-      'Endpoint argument group.',
-      argumentMembers
-    )
-  );
+  if (argumentMembers.length > 0) {
+    sections.push(
+      renderInterfaceDefinition(
+        operation.argumentsTypeName,
+        'Flattened endpoint parameter arguments.',
+        argumentMembers
+      )
+    );
+  }
 
   const renderedResponseDefinition = renderResponseDefinition(
     context,
@@ -238,24 +178,6 @@ const renderOperationDefinition = (
   }
 
   return sections.join('\n\n');
-};
-
-const renderParameterGroupDefinition = (
-  context: OpenApiContext,
-  typeName: string,
-  description: string,
-  parameters: ParameterDefinition[]
-) => {
-  const members = parameters.map((parameter) =>
-    renderInterfaceMember(
-      parameter.propertyName,
-      renderTypeExpression(context, parameter.schema, 1),
-      parameter.required === false,
-      parameter.description
-    )
-  );
-
-  return renderInterfaceDefinition(typeName, description, members);
 };
 
 const renderResponseDefinition = (
@@ -288,6 +210,10 @@ const renderAccessorInterface = (
 ) => {
   const members = accessorGroup.operations.map((operation) => {
     const argumentMode = getOperationArgumentMode(operation);
+    const argumentTypeExpression = getOperationArgumentTypeExpression(
+      context,
+      operation
+    );
     const optionsType = withContext
       ? 'AccessorOptionsWithContext<TAccessorContext>'
       : 'AccessorOptionsWithoutContext';
@@ -303,16 +229,14 @@ const renderAccessorInterface = (
         ? `(${optionsArgument}) => Promise<${responseTypeExpression}>`
         : `(${[
             argumentMode === 'required'
-              ? `args: ${operation.argumentsTypeName}`
-              : `args?: ${operation.argumentsTypeName} | undefined`,
+              ? `args: ${argumentTypeExpression ?? fail(`Missing argument type for ${operation.namingSource}.`)}`
+              : `args?: ${argumentTypeExpression ?? fail(`Missing argument type for ${operation.namingSource}.`)} | undefined`,
             optionsArgument,
           ].join(', ')}) => Promise<${responseTypeExpression}>`;
     const argumentDescription =
       argumentMode === 'none'
         ? undefined
-        : argumentMode === 'required'
-          ? `Arguments for ${operation.method} ${operation.path}.`
-          : `Optional arguments for ${operation.method} ${operation.path}.`;
+        : getOperationArgumentDescription(operation);
     return [
       renderOperationDocumentationComment(
         operation.summary,
@@ -452,19 +376,27 @@ const renderAccessorFactory = (
     push(
       `      url: modestaBuildUrl(${[
         renderLiteral(operation.path),
-        renderPathParameterArgumentObject(operation),
-        operation.queryParameters.length > 0
-          ? argumentMode === 'optional'
-            ? 'args?.queryParameters ?? {}'
-            : 'args.queryParameters ?? {}'
-          : '{}',
+        renderParameterArgumentObject(
+          operation.pathParameters,
+          argumentMode === 'optional'
+        ),
+        renderParameterArgumentObject(
+          operation.queryParameters,
+          argumentMode === 'optional'
+        ),
       ].join(', ')}),`
     );
     push(
-      `      headers: modestaBuildHeaders(${operation.headerParameters.length > 0 ? (argumentMode === 'optional' ? 'args?.headerParameters ?? {}' : 'args.headerParameters ?? {}') : '{}'}, ${operation.requestBody?.contentType != null ? renderLiteral(operation.requestBody.contentType) : 'undefined'}, ${operation.response.accept != null ? renderLiteral(operation.response.accept) : 'undefined'}),`
+      `      headers: modestaBuildHeaders(${renderParameterArgumentObject(
+        operation.headerParameters,
+        argumentMode === 'optional'
+      )}, ${operation.requestBody?.contentType != null ? renderLiteral(operation.requestBody.contentType) : 'undefined'}, ${operation.response.accept != null ? renderLiteral(operation.response.accept) : 'undefined'}),`
     );
     push(
-      `      body: ${operation.requestBody != null ? (argumentMode === 'optional' ? 'args?.body' : 'args.body') : 'undefined'},`
+      `      body: ${renderRequestBodyArgumentExpression(
+        operation,
+        argumentMode === 'optional'
+      )},`
     );
     push('    }, interfaceContext, options),');
   }
@@ -549,11 +481,14 @@ const renderInterfaceMember = (
   type: string,
   optional: boolean,
   description: string | undefined,
-  readonly = true
+  readonly = true,
+  remarks: string | undefined = undefined
 ) => {
   const lines: string[] = [];
-  if (description != null) {
-    lines.push(indent(renderDocumentationComment(description), 1));
+  if (description != null || remarks != null) {
+    lines.push(
+      indent(renderDocumentationCommentWithRemarks(description, remarks), 1)
+    );
   }
   lines.push(
     `  ${readonly ? 'readonly ' : ''}${renderPropertyName(name)}${optional ? '?' : ''}: ${type};`
@@ -650,16 +585,19 @@ const renderTaggedDocumentationComment = (
   return lines.join('\n');
 };
 
-const renderPathParameterArgumentObject = (operation: OperationDefinition) => {
-  if (operation.pathParameters.length === 0) {
+const renderParameterArgumentObject = (
+  parameters: ParameterDefinition[],
+  optionalArguments: boolean
+) => {
+  if (parameters.length === 0) {
     return '{}';
   }
 
   return [
     '{',
-    ...operation.pathParameters.map(
+    ...parameters.map(
       (parameter) =>
-        `  ${renderPropertyName(parameter.propertyName)}: args[${renderLiteral(parameter.propertyName)}],`
+        `  ${renderPropertyName(parameter.name)}: ${optionalArguments ? `args?.[${renderLiteral(parameter.propertyName)}]` : `args[${renderLiteral(parameter.propertyName)}]`},`
     ),
     '}',
   ].join('\n');
@@ -709,25 +647,84 @@ const renderOperationDocumentationComment = (
   return lines.join('\n');
 };
 
+const renderDocumentationCommentWithRemarks = (
+  description: string | undefined,
+  remarks: string | undefined
+) => {
+  if (remarks == null) {
+    return renderDocumentationComment(description);
+  }
+
+  const lines = ['/**'];
+  if (description != null) {
+    lines.push(
+      ...normalizeDocumentationLines(description, '').map(
+        (line) => ` * ${line}`
+      )
+    );
+  }
+  appendTaggedDocumentationLines(lines, 'remarks', '', remarks);
+  lines.push(' */');
+  return lines.join('\n');
+};
+
 const getResponseDocumentationDescription = (response: ResponseDefinition) =>
   response.description ?? `Response type for HTTP ${response.statusCode}.`;
 
 const getOperationArgumentMode = (operation: OperationDefinition) => {
   const hasArguments =
-    operation.pathParameters.length > 0 ||
-    operation.queryParameters.length > 0 ||
-    operation.headerParameters.length > 0 ||
+    getOperationParameters(operation).length > 0 ||
     operation.requestBody != null;
   if (hasArguments === false) {
     return 'none' as const;
   }
 
   const requiresArguments =
-    operation.pathParameters.some((parameter) => parameter.required) ||
-    operation.queryParameters.some((parameter) => parameter.required) ||
-    operation.headerParameters.some((parameter) => parameter.required) ||
+    getOperationParameters(operation).some((parameter) => parameter.required) ||
     (operation.requestBody?.required ?? false);
   return requiresArguments ? ('required' as const) : ('optional' as const);
+};
+
+const getOperationArgumentTypeExpression = (
+  context: OpenApiContext,
+  operation: OperationDefinition
+) => {
+  const parameterCount = getOperationParameters(operation).length;
+  if (operation.requestBody == null) {
+    return parameterCount > 0 ? operation.argumentsTypeName : undefined;
+  }
+
+  const requestBodyTypeExpression = getOperationRequestBodyTypeExpression(
+    context,
+    operation.requestBody
+  );
+  if (parameterCount === 0) {
+    return requestBodyTypeExpression;
+  }
+
+  return `${requestBodyTypeExpression} & ${operation.argumentsTypeName}`;
+};
+
+const getOperationArgumentDescription = (operation: OperationDefinition) => {
+  const hasParameters = getOperationParameters(operation).length > 0;
+  const baseDescription =
+    getOperationArgumentMode(operation) === 'required'
+      ? `Arguments for ${operation.method} ${operation.path}.`
+      : `Optional arguments for ${operation.method} ${operation.path}.`;
+  if (operation.requestBody == null) {
+    return baseDescription;
+  }
+
+  const lines = [baseDescription];
+  lines.push(
+    hasParameters
+      ? 'Request body fields and flattened path/query/header parameters are passed at the top level.'
+      : 'Request body payload is passed directly as args.'
+  );
+  if (operation.requestBody.parameterDescription != null) {
+    lines.push(`Request body: ${operation.requestBody.parameterDescription}`);
+  }
+  return lines.join('\n');
 };
 
 const isSimpleOperationTypeExpression = (typeExpression: string) => {
@@ -1173,6 +1170,32 @@ const hasUnsupportedComposition = (schema: JsonRecord) => {
     asArray(schema.anyOf) != null ||
     getRecord(schema, 'discriminator') != null
   );
+};
+
+const renderRequestBodyArgumentExpression = (
+  operation: OperationDefinition,
+  _optionalArguments: boolean
+) => {
+  if (operation.requestBody == null) {
+    return 'undefined';
+  }
+
+  const parameterPropertyNames = getOperationParameters(operation).map(
+    (parameter) => parameter.propertyName
+  );
+  if (parameterPropertyNames.length === 0) {
+    return 'args';
+  }
+
+  return `modestaExcludeProperties(args, ${renderLiteral(parameterPropertyNames)})`;
+};
+
+const getOperationParameters = (operation: OperationDefinition) => {
+  return [
+    ...operation.pathParameters,
+    ...operation.queryParameters,
+    ...operation.headerParameters,
+  ];
 };
 
 const resolveReferenceTypeName = (

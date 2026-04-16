@@ -24,6 +24,7 @@ import {
   getString,
   isPureReference,
   isRecord,
+  normalizeParameterName,
   selectSuccessStatusCode,
 } from '../util';
 
@@ -75,11 +76,14 @@ export const resolveParameters = (
         : getRequiredRecord(parameter, 'schema', 'parameter schema');
 
     const name = getRequiredString(parameter, 'name', 'parameter name');
+    const propertyName = normalizeParameterName(name, 'value');
     return {
       description: getString(parameter, 'description'),
+      duplicatedPropertyName: undefined,
       location,
       name,
-      propertyName: name,
+      originalPropertyName: propertyName,
+      propertyName,
       required: getBoolean(parameter, 'required') ?? location === 'path',
       schema,
     } satisfies ParameterDefinition;

@@ -5,6 +5,8 @@
 
 import { JsonRecord } from '../types';
 import {
+  asArray,
+  asRecord,
   extractPathPlaceholderName,
   getRecord,
   getRequiredMapEntry,
@@ -19,9 +21,14 @@ import {
   OpenApiContext,
   OperationDefinition,
   OperationNamingDraft,
+  ParameterDefinition,
   RawOperationDefinition,
 } from './types';
-import { resolveRequestBody, resolveResponse } from './resolve';
+import {
+  resolveReferenceObject,
+  resolveRequestBody,
+  resolveResponse,
+} from './resolve';
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -119,30 +126,6 @@ export const buildAccessorGroups = (
       `${groupName}_${draft.memberName}`,
       'generated_operation'
     );
-    const pathParametersTypeName =
-      draft.rawOperation.pathParameters.length > 0
-        ? registerTypeName(
-            context.naming.usedTypeNames,
-            `${typeNamePrefix}_path_parameters`,
-            `path parameters type for ${groupName}.${draft.memberName}`
-          )
-        : undefined;
-    const queryParametersTypeName =
-      draft.rawOperation.queryParameters.length > 0
-        ? registerTypeName(
-            context.naming.usedTypeNames,
-            `${typeNamePrefix}_query_parameters`,
-            `query parameters type for ${groupName}.${draft.memberName}`
-          )
-        : undefined;
-    const headerParametersTypeName =
-      draft.rawOperation.headerParameters.length > 0
-        ? registerTypeName(
-            context.naming.usedTypeNames,
-            `${typeNamePrefix}_header_parameters`,
-            `header parameters type for ${groupName}.${draft.memberName}`
-          )
-        : undefined;
     const requestBodyTypeName =
       getRecord(draft.rawOperation.rawOperation, 'requestBody') != null
         ? registerTypeName(
@@ -168,15 +151,15 @@ export const buildAccessorGroups = (
       descriptorOperationName: `${groupName}.${draft.memberName}`,
       groupName,
       headerParameters: draft.rawOperation.headerParameters,
-      headerParametersTypeName,
+      headerParametersTypeName: undefined,
       method: draft.rawOperation.method,
       memberName: draft.memberName,
       namingSource: draft.namingSource,
       path: draft.rawOperation.path,
       pathParameters: draft.rawOperation.pathParameters,
-      pathParametersTypeName,
+      pathParametersTypeName: undefined,
       queryParameters: draft.rawOperation.queryParameters,
-      queryParametersTypeName,
+      queryParametersTypeName: undefined,
       requestBody:
         requestBodyTypeName != null
           ? resolveRequestBody(
@@ -192,10 +175,14 @@ export const buildAccessorGroups = (
       ),
       summary: draft.rawOperation.summary,
     };
-    validateOperationArgumentMembers(operation);
+    const resolvedOperation = resolveOperationArgumentMembers(
+      context,
+      operation
+    );
+    validateOperationArgumentMembers(context, resolvedOperation);
 
     const groupOperations = operationsByGroup.get(groupName) ?? [];
-    groupOperations.push(operation);
+    groupOperations.push(resolvedOperation);
     operationsByGroup.set(groupName, groupOperations);
   }
 
@@ -219,7 +206,10 @@ export const buildAccessorGroups = (
     );
 };
 
-const validateOperationArgumentMembers = (operation: OperationDefinition) => {
+const validateOperationArgumentMembers = (
+  context: OpenApiContext,
+  operation: OperationDefinition
+) => {
   const memberSourceByName = new Map<string, string>();
   const registerMember = (name: string, source: string) => {
     const existingSource = memberSourceByName.get(name);
@@ -232,30 +222,82 @@ const validateOperationArgumentMembers = (operation: OperationDefinition) => {
     memberSourceByName.set(name, source);
   };
 
-  for (const parameter of operation.pathParameters) {
+  for (const parameter of getOperationParameters(operation)) {
     registerMember(
       parameter.propertyName,
-      `path parameter '${parameter.name}' for ${operation.descriptorOperationName}`
-    );
-  }
-  if (operation.queryParameters.length > 0) {
-    registerMember(
-      'queryParameters',
-      `query parameter group for ${operation.descriptorOperationName}`
-    );
-  }
-  if (operation.headerParameters.length > 0) {
-    registerMember(
-      'headerParameters',
-      `header parameter group for ${operation.descriptorOperationName}`
+      `${parameter.location} parameter '${parameter.name}' for ${operation.descriptorOperationName}`
     );
   }
   if (operation.requestBody != null) {
-    registerMember(
-      'body',
-      `request body for ${operation.descriptorOperationName}`
+    for (const propertyName of collectRequestBodyPropertyNames(
+      context,
+      operation.requestBody.schema
+    )) {
+      registerMember(
+        propertyName,
+        `request body property '${propertyName}' for ${operation.descriptorOperationName}`
+      );
+    }
+  }
+};
+
+const resolveOperationArgumentMembers = (
+  context: OpenApiContext,
+  operation: OperationDefinition
+): OperationDefinition => {
+  const requestBodyPropertyNames =
+    operation.requestBody != null
+      ? collectRequestBodyPropertyNames(context, operation.requestBody.schema)
+      : new Set<string>();
+  const duplicateCounts = new Map<string, number>();
+  for (const propertyName of requestBodyPropertyNames) {
+    duplicateCounts.set(
+      propertyName,
+      (duplicateCounts.get(propertyName) ?? 0) + 1
     );
   }
+  for (const parameter of getOperationParameters(operation)) {
+    duplicateCounts.set(
+      parameter.originalPropertyName,
+      (duplicateCounts.get(parameter.originalPropertyName) ?? 0) + 1
+    );
+  }
+
+  const usedPropertyNames = new Set<string>(requestBodyPropertyNames);
+  const resolveParameter = (
+    parameter: ParameterDefinition
+  ): ParameterDefinition => {
+    const originalPropertyName = parameter.originalPropertyName;
+    const duplicated = (duplicateCounts.get(originalPropertyName) ?? 0) > 1;
+    const preferredPropertyName = duplicated
+      ? `${parameter.location}_${originalPropertyName}`
+      : originalPropertyName;
+    const propertyName = registerUniquePropertyName(
+      usedPropertyNames,
+      preferredPropertyName
+    );
+    if (propertyName !== originalPropertyName) {
+      context.warningSink?.(
+        `Renamed ${parameter.location} parameter '${parameter.name}' to '${propertyName}' in accessor '${operation.groupName}' method '${operation.memberName}' because generated argument name '${originalPropertyName}' was duplicated.`
+      );
+    }
+
+    return {
+      ...parameter,
+      duplicatedPropertyName:
+        propertyName !== originalPropertyName
+          ? originalPropertyName
+          : undefined,
+      propertyName,
+    };
+  };
+
+  return {
+    ...operation,
+    headerParameters: operation.headerParameters.map(resolveParameter),
+    pathParameters: operation.pathParameters.map(resolveParameter),
+    queryParameters: operation.queryParameters.map(resolveParameter),
+  };
 };
 
 const createOperationNamingDraft = (
@@ -469,4 +511,79 @@ const registerValueName = (
 
   usedValueNames.add(preferredName);
   return preferredName;
+};
+
+const getOperationParameters = (operation: OperationDefinition) => {
+  return [
+    ...operation.pathParameters,
+    ...operation.queryParameters,
+    ...operation.headerParameters,
+  ];
+};
+
+const registerUniquePropertyName = (
+  usedPropertyNames: Set<string>,
+  preferredPropertyName: string
+) => {
+  let resolvedPropertyName = preferredPropertyName;
+  let suffix = 2;
+  while (usedPropertyNames.has(resolvedPropertyName)) {
+    resolvedPropertyName = `${preferredPropertyName}_${suffix}`;
+    suffix += 1;
+  }
+  usedPropertyNames.add(resolvedPropertyName);
+  return resolvedPropertyName;
+};
+
+const collectRequestBodyPropertyNames = (
+  context: OpenApiContext,
+  schema: JsonRecord
+): Set<string> => {
+  return collectSchemaPropertyNames(context, schema, new Set<string>());
+};
+
+const collectSchemaPropertyNames = (
+  context: OpenApiContext,
+  schema: JsonRecord,
+  visitedReferences: Set<string>
+): Set<string> => {
+  const reference = typeof schema.$ref === 'string' ? schema.$ref : undefined;
+  if (reference != null) {
+    if (visitedReferences.has(reference)) {
+      return new Set<string>();
+    }
+
+    visitedReferences.add(reference);
+    const resolved = resolveReferenceObject(context.document, schema);
+    return resolved != null
+      ? collectSchemaPropertyNames(context, resolved, visitedReferences)
+      : new Set<string>();
+  }
+
+  const propertyNames = new Set<string>();
+  const properties = getRecord(schema, 'properties');
+  if (properties != null) {
+    for (const propertyName of Object.keys(properties)) {
+      propertyNames.add(propertyName);
+    }
+  }
+
+  const allOf = asArray(schema.allOf);
+  if (allOf != null) {
+    for (const entry of allOf) {
+      const entryRecord = asRecord(entry);
+      if (entryRecord == null) {
+        continue;
+      }
+      for (const propertyName of collectSchemaPropertyNames(
+        context,
+        entryRecord,
+        visitedReferences
+      )) {
+        propertyNames.add(propertyName);
+      }
+    }
+  }
+
+  return propertyNames;
 };

@@ -137,6 +137,21 @@ const modestaSerializeFetchBody = (
     : body;
 };
 
+const modestaExcludeProperties = (
+  value: unknown,
+  propertyNames: string[]
+) => {
+  if (value == null || typeof value !== 'object') {
+    return value;
+  }
+
+  const clonedValue = Array.isArray(value) ? [...value] : { ...value };
+  for (const propertyName of propertyNames) {
+    delete (clonedValue as Record<string, unknown>)[propertyName];
+  }
+  return clonedValue;
+};
+
 /////////////////////////////////////////////////////////////////////////////////
 
 /**

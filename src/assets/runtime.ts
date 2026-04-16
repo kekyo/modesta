@@ -17,6 +17,12 @@ export interface AccessorRequestDescriptor<TRequestBody> {
   readonly body: TRequestBody | undefined;
 }
 
+/** Additional options accepted by generated accessor methods. */
+export interface AccessorOptions {
+  /** Abort signal used to cancel the request. */
+  readonly signal?: AbortSignal | undefined;
+}
+
 /**
  * Sender function used by generated accessors.
  * @typeParam TResponse Response payload type.
@@ -24,13 +30,13 @@ export interface AccessorRequestDescriptor<TRequestBody> {
  * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.
  * @param request Prepared request descriptor.
  * @param context Context value bound when creating the accessor implementation.
- * @param signal Abort signal used to cancel the request.
+ * @param options Additional accessor call options.
  * @returns Promise that resolves to the typed response payload.
  */
 export type AccessorSender<TAccessorInterfaceContext> = <TResponse, TRequestBody>(
   request: AccessorRequestDescriptor<TRequestBody>,
   context: TAccessorInterfaceContext | undefined,
-  signal: AbortSignal | undefined) => Promise<TResponse>;
+  options: AccessorOptions | undefined) => Promise<TResponse>;
 
 /** Options that configure the fetch-based sender. */
 export interface CreateFetchSenderOptions {
@@ -119,7 +125,7 @@ export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSe
   return async <TResponse, TRequestBody>(
     request: AccessorRequestDescriptor<TRequestBody>,
     _context: undefined,
-    signal: AbortSignal | undefined
+    accessorOptions: AccessorOptions | undefined
   ) => {
     const response = await fetchImplementation(
       new URL(request.url, options.baseUrl),
@@ -131,7 +137,7 @@ export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSe
           ...request.headers,
         },
         body: modestaSerializeFetchBody(request.body, request.headers['content-type']),
-        signal,
+        signal: accessorOptions?.signal,
       }
     );
 

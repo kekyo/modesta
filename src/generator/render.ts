@@ -271,12 +271,12 @@ const renderAccessorInterface = (accessorGroup: AccessorGroupDefinition) => {
     const argumentMode = getOperationArgumentMode(operation);
     const signature =
       argumentMode === 'none'
-        ? `(signal?: AbortSignal | undefined) => Promise<${getOperationResponseTypeExpression(operation.response)}>`
+        ? `(options?: AccessorOptions | undefined) => Promise<${getOperationResponseTypeExpression(operation.response)}>`
         : `(${[
             argumentMode === 'required'
               ? `args: ${operation.argumentsTypeName}`
               : `args?: ${operation.argumentsTypeName} | undefined`,
-            'signal?: AbortSignal | undefined',
+            'options?: AccessorOptions | undefined',
           ].join(
             ', '
           )}) => Promise<${getOperationResponseTypeExpression(operation.response)}>`;
@@ -361,10 +361,10 @@ const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
     const argumentMode = getOperationArgumentMode(operation);
     const argumentToken =
       argumentMode === 'none'
-        ? 'signal'
+        ? 'options'
         : argumentMode === 'required'
-          ? 'args, signal'
-          : 'args, signal';
+          ? 'args, options'
+          : 'args, options';
 
     push(
       `    ${renderPropertyName(operation.memberName)}: async (${argumentToken}) => sender<${getOperationResponseTypeExpression(operation.response)}, ${operation.requestBody?.typeName ?? 'undefined'}>({`
@@ -390,7 +390,7 @@ const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
     push(
       `      body: ${operation.requestBody != null ? (argumentMode === 'optional' ? 'args?.body' : 'args.body') : 'undefined'},`
     );
-    push('    }, context, signal),');
+    push('    }, context, options),');
   }
 
   push('  };');
@@ -615,8 +615,8 @@ const renderOperationDocumentationComment = (
   appendTaggedDocumentationLines(
     lines,
     'param',
-    'signal',
-    'Abort signal used to cancel the request.'
+    'options',
+    'Additional accessor call options.'
   );
   appendTaggedDocumentationLines(lines, 'returns', '', returnDescription);
   lines.push(' */');

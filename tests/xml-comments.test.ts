@@ -226,7 +226,7 @@ describe('xml comments integration', () => {
         ' * @remarks First detail line.',
         ' * Second detail line.',
         ' * @param args Optional arguments for GET /xml-comments/documented.',
-        ' * @param signal Abort signal used to cancel the request.',
+        ' * @param options Additional accessor call options.',
         ' * @returns XML documented success response.',
         ' */',
       ].join('\n')
@@ -238,7 +238,7 @@ describe('xml comments integration', () => {
         '/**',
         ' * Creates a documented response.',
         ' * @param args Optional arguments for POST /xml-comments/documented.',
-        ' * @param signal Abort signal used to cancel the request.',
+        ' * @param options Additional accessor call options.',
         ' * @returns XML documented create response.',
         ' */',
       ].join('\n')
@@ -249,7 +249,7 @@ describe('xml comments integration', () => {
       [
         '/**',
         ' * Returns a response documented only by the returns tag.',
-        ' * @param signal Abort signal used to cancel the request.',
+        ' * @param options Additional accessor call options.',
         ' * @returns OK',
         ' */',
       ].join('\n')
@@ -315,7 +315,7 @@ describe('xml comments integration', () => {
         ' * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.',
         ' * @param request Prepared request descriptor.',
         ' * @param context Context value bound when creating the accessor implementation.',
-        ' * @param signal Abort signal used to cancel the request.',
+        ' * @param options Additional accessor call options.',
         ' * @returns Promise that resolves to the typed response payload.',
         ' */',
       ].join('\n')

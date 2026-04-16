@@ -115,15 +115,15 @@ export type GetUser_get_response = User;
 export interface GetUser {
   get: (
     args: GetUser_get_arguments,
-    signal?: AbortSignal | undefined
+    options?: AccessorOptions | undefined
   ) => Promise<GetUser_get_response>;
 }
 
 export const create_GetUser_accessor = <TAccessorInterfaceContext>(
   sender: AccessorSender<TAccessorInterfaceContext>,
   context?: TAccessorInterfaceContext): GetUser => ({
-  get: async (args, signal) =>
-    sender<GetUser_get_response, undefined>(/* ... */, context, signal),
+  get: async (args, options) =>
+    sender<GetUser_get_response, undefined>(/* ... */, context, options),
 });
 ```
 
@@ -292,7 +292,7 @@ const sender = createFetchSender({
 // Generate an accessor from Sender to the API
 const summaries = create_ListSummaries_accessor(sender);
 
-// Call the API (you can also specify an AbortSignal)
+// Call the API (you can also specify an AbortSignal via AccessorOptions)
 const result = await summaries.get({
   region: 'apac',
   queryParameters: {
@@ -301,7 +301,7 @@ const result = await summaries.get({
   headerParameters: {
     'x-api-key': 'secret',
   },
-}, signal);
+}, { signal });
 ```
 
 If you need a custom transport layer, writing `AccessorSender` is enough:
@@ -321,14 +321,14 @@ type RequestContext = {
 const sender: AccessorSender<RequestContext> = async (
   request,
   context,
-  signal
+  options
 ) => {
   const response = await myTransport(request.url, {
     method: request.method,
     headers: request.headers,
     body: request.body,
     traceId: context?.traceId,
-    signal,
+    signal: options?.signal,
   });
 
   return response as unknown;
@@ -340,7 +340,7 @@ const summaries = create_ListSummaries_accessor(sender, {
 });
 ```
 
-`createFetchSender()` ignores the accessor context value and only uses the request descriptor plus `AbortSignal`.
+`createFetchSender()` ignores the accessor context value and only uses the request descriptor plus `AccessorOptions`.
 
 ## Generation Rules
 
@@ -361,14 +361,14 @@ For example, `GET /users/{id}` becomes roughly the following shape when no `oper
 export interface users {
   get_by_id: (
     args: users_get_by_id_arguments,
-    signal?: AbortSignal | undefined
+    options?: AccessorOptions | undefined
   ) => Promise<users_get_by_id_response>;
 }
 
 export const create_users_accessor = <TAccessorInterfaceContext>(
   sender: AccessorSender<TAccessorInterfaceContext>,
   context?: TAccessorInterfaceContext): users => ({
-  get_by_id: async (args, signal) =>
+  get_by_id: async (args, options) =>
     sender(
       {
         operationName: 'users.get_by_id',
@@ -384,7 +384,7 @@ export const create_users_accessor = <TAccessorInterfaceContext>(
         body: undefined,
       },
       context,
-      signal
+      options
     ),
 });
 ```

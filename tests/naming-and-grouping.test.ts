@@ -160,19 +160,19 @@ describe('naming and grouping rules', () => {
     const usersBlock = getInterfaceBlock(pathGroupingSource, 'users');
 
     expect(xmlCommentsBlock).toContain(
-      'readonly get_documented: (signal?: AbortSignal | undefined) => Promise<xml_comments_get_documented_response>;'
+      'readonly get_documented: (options?: AccessorOptions | undefined) => Promise<xml_comments_get_documented_response>;'
     );
     expect(xmlCommentsBlock).toContain(
-      'readonly post_documented: (signal?: AbortSignal | undefined) => Promise<xml_comments_post_documented_response>;'
+      'readonly post_documented: (options?: AccessorOptions | undefined) => Promise<xml_comments_post_documented_response>;'
     );
     expect(xmlCommentsBlock).toContain(
-      'readonly get_returns_only: (signal?: AbortSignal | undefined) => Promise<xml_comments_get_returns_only_response>;'
+      'readonly get_returns_only: (options?: AccessorOptions | undefined) => Promise<xml_comments_get_returns_only_response>;'
     );
     expect(anotherBlock).toContain(
-      'readonly get_returns_only: (signal?: AbortSignal | undefined) => Promise<another_get_returns_only_response>;'
+      'readonly get_returns_only: (options?: AccessorOptions | undefined) => Promise<another_get_returns_only_response>;'
     );
     expect(usersBlock).toContain(
-      'readonly get_by_id: (args: users_get_by_id_arguments, signal?: AbortSignal | undefined) => Promise<users_get_by_id_response>;'
+      'readonly get_by_id: (args: users_get_by_id_arguments, options?: AccessorOptions | undefined) => Promise<users_get_by_id_response>;'
     );
 
     expect(pathGroupingSource).toContain(
@@ -228,13 +228,13 @@ describe('naming and grouping rules', () => {
     const hogeBlock = getInterfaceBlock(uniqueSuffixSource, 'hoge');
 
     expect(foobarXmlCommentsBlock).toContain(
-      'readonly get_documented: (signal?: AbortSignal | undefined) => Promise<foobar_xml_comments_get_documented_response>;'
+      'readonly get_documented: (options?: AccessorOptions | undefined) => Promise<foobar_xml_comments_get_documented_response>;'
     );
     expect(bazXmlCommentsBlock).toContain(
-      'readonly get_documented: (signal?: AbortSignal | undefined) => Promise<baz_xml_comments_get_documented_response>;'
+      'readonly get_documented: (options?: AccessorOptions | undefined) => Promise<baz_xml_comments_get_documented_response>;'
     );
     expect(hogeBlock).toContain(
-      'readonly get_documented: (signal?: AbortSignal | undefined) => Promise<hoge_get_documented_response>;'
+      'readonly get_documented: (options?: AccessorOptions | undefined) => Promise<hoge_get_documented_response>;'
     );
   });
 

@@ -148,16 +148,16 @@ describe('operation definition generation', () => {
       getTypeAliasStatement(generatedSource, 'DeleteItem_delete_response')
     ).toBe('export type DeleteItem_delete_response = void;');
     expect(generatedSource).toContain(
-      '_delete: (args: DeleteItem_delete_arguments, signal?: AbortSignal | undefined) => Promise<void>;'
+      '_delete: (args: DeleteItem_delete_arguments, options?: AccessorOptions | undefined) => Promise<void>;'
     );
   });
 
   it('omits args from no-argument accessor signatures', () => {
     expect(generatedSource).toContain(
-      'get: (signal?: AbortSignal | undefined) => Promise<ListItems_get_response>;'
+      'get: (options?: AccessorOptions | undefined) => Promise<ListItems_get_response>;'
     );
     expect(generatedSource).not.toContain(
-      'get: (args?: ListItems_get_arguments | undefined, signal?: AbortSignal | undefined) => Promise<ListItems_get_response>;'
+      'get: (args?: ListItems_get_arguments | undefined, options?: AccessorOptions | undefined) => Promise<ListItems_get_response>;'
     );
   });
 
@@ -203,7 +203,7 @@ describe('operation definition generation', () => {
       {
         id: '42',
       },
-      signal
+      { signal }
     );
 
     expect(sender).toHaveBeenCalledWith(
@@ -217,7 +217,7 @@ describe('operation definition generation', () => {
         body: undefined,
       },
       undefined,
-      signal
+      { signal }
     );
   });
 
@@ -248,16 +248,16 @@ describe('operation definition generation', () => {
 
   it('builds sender descriptors for operations without arguments', async () => {
     const sender = vi.fn(
-      async (request: unknown, context: unknown, signal: unknown) => ({
+      async (request: unknown, context: unknown, options: unknown) => ({
         request,
         context,
-        signal,
+        options,
       })
     );
     const accessor = generatedModule.create_ListItems_accessor(sender);
     const signal = new AbortController().signal;
 
-    await accessor.get(signal);
+    await accessor.get({ signal });
 
     expect(sender).toHaveBeenCalledWith(
       {
@@ -270,7 +270,7 @@ describe('operation definition generation', () => {
         body: undefined,
       },
       undefined,
-      signal
+      { signal }
     );
   });
 
@@ -399,7 +399,7 @@ describe('operation definition generation', () => {
       {
         id: '42',
       },
-      signal
+      { signal }
     );
 
     expect(result).toEqual({

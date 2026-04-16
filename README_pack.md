@@ -109,15 +109,15 @@ export type GetUser_get_response = User;
 export interface GetUser {
   get: (
     args: GetUser_get_arguments,
-    signal?: AbortSignal | undefined
+    options?: AccessorOptions | undefined
   ) => Promise<GetUser_get_response>;
 }
 
 export const create_GetUser_accessor = <TAccessorInterfaceContext>(
   sender: AccessorSender<TAccessorInterfaceContext>,
   context?: TAccessorInterfaceContext): GetUser => ({
-  get: async (args, signal) =>
-    sender<GetUser_get_response, undefined>(/* ... */, context, signal),
+  get: async (args, options) =>
+    sender<GetUser_get_response, undefined>(/* ... */, context, options),
 });
 ```
 

@@ -112,15 +112,15 @@ export type GetUser_get_response = User;
 export interface GetUser {
   get: (
     args: GetUser_get_arguments,
-    signal?: AbortSignal | undefined
+    options?: AccessorOptions | undefined
   ) => Promise<GetUser_get_response>;
 }
 
 export const create_GetUser_accessor = <TAccessorInterfaceContext>(
   sender: AccessorSender<TAccessorInterfaceContext>,
   context?: TAccessorInterfaceContext): GetUser => ({
-  get: async (args, signal) =>
-    sender<GetUser_get_response, undefined>(/* ... */, context, signal),
+  get: async (args, options) =>
+    sender<GetUser_get_response, undefined>(/* ... */, context, options),
 });
 ```
 
@@ -286,7 +286,7 @@ const sender = createFetchSender({
 // SenderからAPIへのアクセサを生成する
 const summaries = create_ListSummaries_accessor(sender);
 
-// APIを呼び出す（AbortSignalを指定することも可能）
+// APIを呼び出す（AccessorOptions 経由で AbortSignal を指定することも可能）
 const result = await summaries.get({
   region: 'apac',
   queryParameters: {
@@ -295,7 +295,7 @@ const result = await summaries.get({
   headerParameters: {
     'x-api-key': 'secret',
   },
-}, signal);
+}, { signal });
 ```
 
 独自のトランスポート層を使う場合は、 `AccessorSender` だけを書けば十分です:
@@ -315,14 +315,14 @@ type RequestContext = {
 const sender: AccessorSender<RequestContext> = async (
   request,
   context,
-  signal
+  options
 ) => {
   const response = await myTransport(request.url, {
     method: request.method,
     headers: request.headers,
     body: request.body,
     traceId: context?.traceId,
-    signal,
+    signal: options?.signal,
   });
 
   return response as unknown;
@@ -334,7 +334,7 @@ const summaries = create_ListSummaries_accessor(sender, {
 });
 ```
 
-`createFetchSender()` はアクセサに束縛した `context` を無視し、リクエスト記述子と `AbortSignal` のみを使います。
+`createFetchSender()` はアクセサに束縛した `context` を無視し、リクエスト記述子と `AccessorOptions` のみを使います。
 
 ## 生成ルール
 
@@ -355,14 +355,14 @@ modesta は公開名を `operationId` またはパスから導出します。
 export interface users {
   get_by_id: (
     args: users_get_by_id_arguments,
-    signal?: AbortSignal | undefined
+    options?: AccessorOptions | undefined
   ) => Promise<users_get_by_id_response>;
 }
 
 export const create_users_accessor = <TAccessorInterfaceContext>(
   sender: AccessorSender<TAccessorInterfaceContext>,
   context?: TAccessorInterfaceContext): users => ({
-  get_by_id: async (args, signal) =>
+  get_by_id: async (args, options) =>
     sender(
       {
         operationName: 'users.get_by_id',
@@ -378,7 +378,7 @@ export const create_users_accessor = <TAccessorInterfaceContext>(
         body: undefined,
       },
       context,
-      signal
+      options
     ),
 });
 ```

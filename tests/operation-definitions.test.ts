@@ -168,13 +168,13 @@ describe('operation definition generation', () => {
     expect(generatedSource).toContain(
       [
         'export function create_GetRouteValue_accessor(sender: AccessorSender<undefined>): GetRouteValue;',
-        'export function create_GetRouteValue_accessor<TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  context: TContext',
+        'export function create_GetRouteValue_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSender<TAccessorInterfaceContext>,',
+        '  context: TAccessorInterfaceContext',
         '): GetRouteValue;',
-        'export function create_GetRouteValue_accessor<TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  context?: TContext',
+        'export function create_GetRouteValue_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSender<TAccessorInterfaceContext>,',
+        '  context?: TAccessorInterfaceContext',
         '): GetRouteValue {',
       ].join('\n')
     );
@@ -186,9 +186,9 @@ describe('operation definition generation', () => {
     );
     expect(generatedSource).toContain(
       [
-        'export function create_DeleteItem_accessor<TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  context?: TContext',
+        'export function create_DeleteItem_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSender<TAccessorInterfaceContext>,',
+        '  context?: TAccessorInterfaceContext',
         '): DeleteItem {',
       ].join('\n')
     );

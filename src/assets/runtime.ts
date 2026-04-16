@@ -21,15 +21,15 @@ export interface AccessorRequestDescriptor<TRequestBody> {
  * Sender function used by generated accessors.
  * @typeParam TResponse Response payload type.
  * @typeParam TRequestBody Request body payload type.
- * @typeParam TContext Context value type passed to the sender.
+ * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.
  * @param request Prepared request descriptor.
  * @param context Context value bound when creating the accessor implementation.
  * @param signal Abort signal used to cancel the request.
  * @returns Promise that resolves to the typed response payload.
  */
-export type AccessorSender<TContext> = <TResponse, TRequestBody>(
+export type AccessorSender<TAccessorInterfaceContext> = <TResponse, TRequestBody>(
   request: AccessorRequestDescriptor<TRequestBody>,
-  context: TContext | undefined,
+  context: TAccessorInterfaceContext | undefined,
   signal: AbortSignal | undefined) => Promise<TResponse>;
 
 /** Options that configure the fetch-based sender. */

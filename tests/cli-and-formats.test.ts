@@ -131,26 +131,26 @@ describe('CLI and format support', () => {
     expect(generatedSource).toContain(
       [
         'export function create_LookupSummaries_accessor(sender: AccessorSender<undefined>): LookupSummaries;',
-        'export function create_LookupSummaries_accessor<TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  context: TContext',
+        'export function create_LookupSummaries_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSender<TAccessorInterfaceContext>,',
+        '  context: TAccessorInterfaceContext',
         '): LookupSummaries;',
-        'export function create_LookupSummaries_accessor<TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  context?: TContext',
+        'export function create_LookupSummaries_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSender<TAccessorInterfaceContext>,',
+        '  context?: TAccessorInterfaceContext',
         '): LookupSummaries {',
       ].join('\n')
     );
     expect(generatedSource).toContain(
       [
         'export function create_ListSummaries_accessor(sender: AccessorSender<undefined>): ListSummaries;',
-        'export function create_ListSummaries_accessor<TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  context: TContext',
+        'export function create_ListSummaries_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSender<TAccessorInterfaceContext>,',
+        '  context: TAccessorInterfaceContext',
         '): ListSummaries;',
-        'export function create_ListSummaries_accessor<TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  context?: TContext',
+        'export function create_ListSummaries_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSender<TAccessorInterfaceContext>,',
+        '  context?: TAccessorInterfaceContext',
         '): ListSummaries {',
       ].join('\n')
     );
@@ -221,13 +221,13 @@ describe('CLI and format support', () => {
     expect(stdout).toContain(
       [
         'export function create_LookupSummaries_accessor(sender: AccessorSender<undefined>): LookupSummaries;',
-        'export function create_LookupSummaries_accessor<TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  context: TContext',
+        'export function create_LookupSummaries_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSender<TAccessorInterfaceContext>,',
+        '  context: TAccessorInterfaceContext',
         '): LookupSummaries;',
-        'export function create_LookupSummaries_accessor<TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  context?: TContext',
+        'export function create_LookupSummaries_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSender<TAccessorInterfaceContext>,',
+        '  context?: TAccessorInterfaceContext',
         '): LookupSummaries {',
       ].join('\n')
     );

@@ -178,39 +178,39 @@ describe('naming and grouping rules', () => {
     expect(pathGroupingSource).toContain(
       [
         'export function create_xml_comments_accessor(sender: AccessorSender<undefined>): xml_comments;',
-        'export function create_xml_comments_accessor<TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  context: TContext',
+        'export function create_xml_comments_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSender<TAccessorInterfaceContext>,',
+        '  context: TAccessorInterfaceContext',
         '): xml_comments;',
-        'export function create_xml_comments_accessor<TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  context?: TContext',
+        'export function create_xml_comments_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSender<TAccessorInterfaceContext>,',
+        '  context?: TAccessorInterfaceContext',
         '): xml_comments {',
       ].join('\n')
     );
     expect(pathGroupingSource).toContain(
       [
         'export function create_another_accessor(sender: AccessorSender<undefined>): another;',
-        'export function create_another_accessor<TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  context: TContext',
+        'export function create_another_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSender<TAccessorInterfaceContext>,',
+        '  context: TAccessorInterfaceContext',
         '): another;',
-        'export function create_another_accessor<TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  context?: TContext',
+        'export function create_another_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSender<TAccessorInterfaceContext>,',
+        '  context?: TAccessorInterfaceContext',
         '): another {',
       ].join('\n')
     );
     expect(pathGroupingSource).toContain(
       [
         'export function create_users_accessor(sender: AccessorSender<undefined>): users;',
-        'export function create_users_accessor<TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  context: TContext',
+        'export function create_users_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSender<TAccessorInterfaceContext>,',
+        '  context: TAccessorInterfaceContext',
         '): users;',
-        'export function create_users_accessor<TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  context?: TContext',
+        'export function create_users_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSender<TAccessorInterfaceContext>,',
+        '  context?: TAccessorInterfaceContext',
         '): users {',
       ].join('\n')
     );

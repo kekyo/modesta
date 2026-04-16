@@ -312,7 +312,7 @@ describe('xml comments integration', () => {
         ' * Sender function used by generated accessors.',
         ' * @typeParam TResponse Response payload type.',
         ' * @typeParam TRequestBody Request body payload type.',
-        ' * @typeParam TContext Context value type passed to the sender.',
+        ' * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.',
         ' * @param request Prepared request descriptor.',
         ' * @param context Context value bound when creating the accessor implementation.',
         ' * @param signal Abort signal used to cancel the request.',
@@ -365,7 +365,7 @@ describe('xml comments integration', () => {
       [
         '/**',
         ' * Creates a xml_comments accessor implementation.',
-        ' * @typeParam TContext Context value type passed to the sender.',
+        ' * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.',
         ' * @param sender Sender implementation used to execute generated requests.',
         ' * @param context Context value passed to the sender for every accessor call. This may be ignored depending on the sender.',
         ' * @returns xml_comments accessor implementation bound to the provided sender.',

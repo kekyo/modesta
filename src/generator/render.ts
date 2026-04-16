@@ -331,8 +331,9 @@ const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
           'The context argument can be omitted when the sender accepts `undefined` as its context type.',
         typeParams: [
           {
-            description: 'Context value type passed to the sender.',
-            name: 'TContext',
+            description:
+              'Accessor interface context value type passed to the sender.',
+            name: 'TAccessorInterfaceContext',
           },
         ],
         returns: `${accessorGroup.interfaceName} accessor implementation bound to the provided sender.`,
@@ -342,13 +343,17 @@ const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
   push(
     `export function ${accessorGroup.factoryName}(sender: AccessorSender<undefined>): ${accessorGroup.interfaceName};`
   );
-  push(`export function ${accessorGroup.factoryName}<TContext>(`);
-  push('  sender: AccessorSender<TContext>,');
-  push('  context: TContext');
+  push(
+    `export function ${accessorGroup.factoryName}<TAccessorInterfaceContext>(`
+  );
+  push('  sender: AccessorSender<TAccessorInterfaceContext>,');
+  push('  context: TAccessorInterfaceContext');
   push(`): ${accessorGroup.interfaceName};`);
-  push(`export function ${accessorGroup.factoryName}<TContext>(`);
-  push('  sender: AccessorSender<TContext>,');
-  push('  context?: TContext');
+  push(
+    `export function ${accessorGroup.factoryName}<TAccessorInterfaceContext>(`
+  );
+  push('  sender: AccessorSender<TAccessorInterfaceContext>,');
+  push('  context?: TAccessorInterfaceContext');
   push(`): ${accessorGroup.interfaceName} {`);
   push('  return {');
 

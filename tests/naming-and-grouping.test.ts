@@ -160,58 +160,79 @@ describe('naming and grouping rules', () => {
     const usersBlock = getInterfaceBlock(pathGroupingSource, 'users');
 
     expect(xmlCommentsBlock).toContain(
-      'readonly get_documented: (options?: AccessorOptions | undefined) => Promise<xml_comments_get_documented_response>;'
+      'readonly get_documented: (options?: AccessorOptionsWithoutContext | undefined) => Promise<xml_comments_get_documented_response>;'
     );
     expect(xmlCommentsBlock).toContain(
-      'readonly post_documented: (options?: AccessorOptions | undefined) => Promise<xml_comments_post_documented_response>;'
+      'readonly post_documented: (options?: AccessorOptionsWithoutContext | undefined) => Promise<xml_comments_post_documented_response>;'
     );
     expect(xmlCommentsBlock).toContain(
-      'readonly get_returns_only: (options?: AccessorOptions | undefined) => Promise<xml_comments_get_returns_only_response>;'
+      'readonly get_returns_only: (options?: AccessorOptionsWithoutContext | undefined) => Promise<xml_comments_get_returns_only_response>;'
     );
     expect(anotherBlock).toContain(
-      'readonly get_returns_only: (options?: AccessorOptions | undefined) => Promise<another_get_returns_only_response>;'
+      'readonly get_returns_only: (options?: AccessorOptionsWithoutContext | undefined) => Promise<another_get_returns_only_response>;'
     );
     expect(usersBlock).toContain(
-      'readonly get_by_id: (args: users_get_by_id_arguments, options?: AccessorOptions | undefined) => Promise<users_get_by_id_response>;'
+      'readonly get_by_id: (args: users_get_by_id_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<users_get_by_id_response>;'
     );
 
     expect(pathGroupingSource).toContain(
       [
-        'export function create_xml_comments_accessor(sender: AccessorSender<undefined>): xml_comments;',
+        'export function create_xml_comments_accessor(sender: AccessorSenderWithoutContext<undefined>): xml_comments;',
         'export function create_xml_comments_accessor<TAccessorInterfaceContext>(',
-        '  sender: AccessorSender<TAccessorInterfaceContext>,',
-        '  context: TAccessorInterfaceContext',
+        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext>,',
+        '  interfaceContext: TAccessorInterfaceContext',
         '): xml_comments;',
-        'export function create_xml_comments_accessor<TAccessorInterfaceContext>(',
-        '  sender: AccessorSender<TAccessorInterfaceContext>,',
-        '  context?: TAccessorInterfaceContext',
-        '): xml_comments {',
+        'export function create_xml_comments_accessor<TAccessorContext>(',
+        '  sender: AccessorSenderWithContext<undefined, TAccessorContext>',
+        '): xml_comments_with_context<TAccessorContext>;',
+        'export function create_xml_comments_accessor<TAccessorInterfaceContext, TAccessorContext>(',
+        '  sender: AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
+        '  interfaceContext: TAccessorInterfaceContext',
+        '): xml_comments_with_context<TAccessorContext>;',
+        'export function create_xml_comments_accessor<TAccessorInterfaceContext, TAccessorContext>(',
+        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext> | AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
+        '  interfaceContext?: TAccessorInterfaceContext',
+        '): xml_comments | xml_comments_with_context<TAccessorContext> {',
       ].join('\n')
     );
     expect(pathGroupingSource).toContain(
       [
-        'export function create_another_accessor(sender: AccessorSender<undefined>): another;',
+        'export function create_another_accessor(sender: AccessorSenderWithoutContext<undefined>): another;',
         'export function create_another_accessor<TAccessorInterfaceContext>(',
-        '  sender: AccessorSender<TAccessorInterfaceContext>,',
-        '  context: TAccessorInterfaceContext',
+        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext>,',
+        '  interfaceContext: TAccessorInterfaceContext',
         '): another;',
-        'export function create_another_accessor<TAccessorInterfaceContext>(',
-        '  sender: AccessorSender<TAccessorInterfaceContext>,',
-        '  context?: TAccessorInterfaceContext',
-        '): another {',
+        'export function create_another_accessor<TAccessorContext>(',
+        '  sender: AccessorSenderWithContext<undefined, TAccessorContext>',
+        '): another_with_context<TAccessorContext>;',
+        'export function create_another_accessor<TAccessorInterfaceContext, TAccessorContext>(',
+        '  sender: AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
+        '  interfaceContext: TAccessorInterfaceContext',
+        '): another_with_context<TAccessorContext>;',
+        'export function create_another_accessor<TAccessorInterfaceContext, TAccessorContext>(',
+        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext> | AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
+        '  interfaceContext?: TAccessorInterfaceContext',
+        '): another | another_with_context<TAccessorContext> {',
       ].join('\n')
     );
     expect(pathGroupingSource).toContain(
       [
-        'export function create_users_accessor(sender: AccessorSender<undefined>): users;',
+        'export function create_users_accessor(sender: AccessorSenderWithoutContext<undefined>): users;',
         'export function create_users_accessor<TAccessorInterfaceContext>(',
-        '  sender: AccessorSender<TAccessorInterfaceContext>,',
-        '  context: TAccessorInterfaceContext',
+        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext>,',
+        '  interfaceContext: TAccessorInterfaceContext',
         '): users;',
-        'export function create_users_accessor<TAccessorInterfaceContext>(',
-        '  sender: AccessorSender<TAccessorInterfaceContext>,',
-        '  context?: TAccessorInterfaceContext',
-        '): users {',
+        'export function create_users_accessor<TAccessorContext>(',
+        '  sender: AccessorSenderWithContext<undefined, TAccessorContext>',
+        '): users_with_context<TAccessorContext>;',
+        'export function create_users_accessor<TAccessorInterfaceContext, TAccessorContext>(',
+        '  sender: AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
+        '  interfaceContext: TAccessorInterfaceContext',
+        '): users_with_context<TAccessorContext>;',
+        'export function create_users_accessor<TAccessorInterfaceContext, TAccessorContext>(',
+        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext> | AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
+        '  interfaceContext?: TAccessorInterfaceContext',
+        '): users | users_with_context<TAccessorContext> {',
       ].join('\n')
     );
   });
@@ -228,13 +249,13 @@ describe('naming and grouping rules', () => {
     const hogeBlock = getInterfaceBlock(uniqueSuffixSource, 'hoge');
 
     expect(foobarXmlCommentsBlock).toContain(
-      'readonly get_documented: (options?: AccessorOptions | undefined) => Promise<foobar_xml_comments_get_documented_response>;'
+      'readonly get_documented: (options?: AccessorOptionsWithoutContext | undefined) => Promise<foobar_xml_comments_get_documented_response>;'
     );
     expect(bazXmlCommentsBlock).toContain(
-      'readonly get_documented: (options?: AccessorOptions | undefined) => Promise<baz_xml_comments_get_documented_response>;'
+      'readonly get_documented: (options?: AccessorOptionsWithoutContext | undefined) => Promise<baz_xml_comments_get_documented_response>;'
     );
     expect(hogeBlock).toContain(
-      'readonly get_documented: (options?: AccessorOptions | undefined) => Promise<hoge_get_documented_response>;'
+      'readonly get_documented: (options?: AccessorOptionsWithoutContext | undefined) => Promise<hoge_get_documented_response>;'
     );
   });
 

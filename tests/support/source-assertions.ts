@@ -38,7 +38,7 @@ const findDocumentationBeforeIndex = (
 
 const findInterfaceDeclaration = (source: string, interfaceName: string) => {
   const pattern = new RegExp(
-    `export interface ${escapeRegExp(interfaceName)}(?:<[^\\n{]+>)? \\{`,
+    `export interface ${escapeRegExp(interfaceName)}(?:<[^\\n{]+>)?(?:\\s+extends[^{]+)?\\s*\\{`,
     'u'
   );
   const match = pattern.exec(source);

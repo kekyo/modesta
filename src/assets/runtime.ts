@@ -17,26 +17,58 @@ export interface AccessorRequestDescriptor<TRequestBody> {
   readonly body: TRequestBody | undefined;
 }
 
-/** Additional options accepted by generated accessor methods. */
+/** Shared options accepted by generated accessor methods. */
 export interface AccessorOptions {
   /** Abort signal used to cancel the request. */
   readonly signal?: AbortSignal | undefined;
 }
 
+/** Additional options accepted by accessors that do not use per-call context values. */
+export interface AccessorOptionsWithoutContext extends AccessorOptions {
+  /** Per-call context values are not accepted by this accessor shape. */
+  readonly context?: never;
+}
+
 /**
- * Sender function used by generated accessors.
+ * Additional options accepted by accessors that require a per-call context value.
+ * @typeParam TAccessorContext Per-call context value type passed to the sender.
+ */
+export interface AccessorOptionsWithContext<TAccessorContext>
+  extends AccessorOptions {
+  /** Context value passed to the sender for this accessor call. */
+  readonly context: TAccessorContext;
+}
+
+/**
+ * Sender function used by generated accessors that do not require per-call context values.
  * @typeParam TResponse Response payload type.
  * @typeParam TRequestBody Request body payload type.
  * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.
  * @param request Prepared request descriptor.
- * @param context Context value bound when creating the accessor implementation.
- * @param options Additional accessor call options.
+ * @param interfaceContext Context value bound when creating the accessor implementation.
+ * @param options Additional accessor call options without per-call context.
  * @returns Promise that resolves to the typed response payload.
  */
-export type AccessorSender<TAccessorInterfaceContext> = <TResponse, TRequestBody>(
+export type AccessorSenderWithoutContext<TAccessorInterfaceContext> = <TResponse, TRequestBody>(
   request: AccessorRequestDescriptor<TRequestBody>,
-  context: TAccessorInterfaceContext | undefined,
-  options: AccessorOptions | undefined) => Promise<TResponse>;
+  interfaceContext: TAccessorInterfaceContext | undefined,
+  options: AccessorOptionsWithoutContext | undefined) => Promise<TResponse>;
+
+/**
+ * Sender function used by generated accessors that require per-call context values.
+ * @typeParam TResponse Response payload type.
+ * @typeParam TRequestBody Request body payload type.
+ * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.
+ * @typeParam TAccessorContext Per-call context value type passed to the sender.
+ * @param request Prepared request descriptor.
+ * @param interfaceContext Context value bound when creating the accessor implementation.
+ * @param options Additional accessor call options with per-call context.
+ * @returns Promise that resolves to the typed response payload.
+ */
+export type AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext> = <TResponse, TRequestBody>(
+  request: AccessorRequestDescriptor<TRequestBody>,
+  interfaceContext: TAccessorInterfaceContext | undefined,
+  options: AccessorOptionsWithContext<TAccessorContext>) => Promise<TResponse>;
 
 /** Options that configure the fetch-based sender. */
 export interface CreateFetchSenderOptions {
@@ -112,9 +144,9 @@ const modestaSerializeFetchBody = (
  * @param options Options that configure the fetch-based sender.
  * @returns Sender implementation that executes requests via the fetch API.
  * @remarks When `options.fetch` is omitted, `globalThis.fetch` must be available.
- * Accessor context values are ignored by this sender implementation.
+ * Accessor interface context values are ignored by this sender implementation.
  */
-export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSender<undefined> => {
+export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSenderWithoutContext<undefined> => {
   const fetchImplementation = options.fetch ?? globalThis.fetch;
   if (typeof fetchImplementation !== 'function') {
     throw new Error(
@@ -124,8 +156,8 @@ export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSe
 
   return async <TResponse, TRequestBody>(
     request: AccessorRequestDescriptor<TRequestBody>,
-    _context: undefined,
-    accessorOptions: AccessorOptions | undefined
+    _interfaceContext: undefined,
+    accessorOptions: AccessorOptionsWithoutContext | undefined
   ) => {
     const response = await fetchImplementation(
       new URL(request.url, options.baseUrl),

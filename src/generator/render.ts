@@ -95,7 +95,7 @@ export const renderApiDefinition = (
       push();
     }
 
-    push(renderAccessorInterface(accessorGroup));
+    push(renderAccessorInterfaces(accessorGroup));
     push();
     push(renderAccessorFactory(accessorGroup));
     push();
@@ -266,17 +266,29 @@ const renderResponseDefinition = (
   );
 };
 
-const renderAccessorInterface = (accessorGroup: AccessorGroupDefinition) => {
+const getAccessorWithContextInterfaceName = (interfaceName: string) =>
+  `${interfaceName}_with_context`;
+
+const renderAccessorInterface = (
+  accessorGroup: AccessorGroupDefinition,
+  withContext: boolean
+) => {
   const members = accessorGroup.operations.map((operation) => {
     const argumentMode = getOperationArgumentMode(operation);
+    const optionsType = withContext
+      ? 'AccessorOptionsWithContext<TAccessorContext>'
+      : 'AccessorOptionsWithoutContext';
+    const optionsArgument = withContext
+      ? `options: ${optionsType}`
+      : `options?: ${optionsType} | undefined`;
     const signature =
       argumentMode === 'none'
-        ? `(options?: AccessorOptions | undefined) => Promise<${getOperationResponseTypeExpression(operation.response)}>`
+        ? `(${optionsArgument}) => Promise<${getOperationResponseTypeExpression(operation.response)}>`
         : `(${[
             argumentMode === 'required'
               ? `args: ${operation.argumentsTypeName}`
               : `args?: ${operation.argumentsTypeName} | undefined`,
-            'options?: AccessorOptions | undefined',
+            optionsArgument,
           ].join(
             ', '
           )}) => Promise<${getOperationResponseTypeExpression(operation.response)}>`;
@@ -292,6 +304,9 @@ const renderAccessorInterface = (accessorGroup: AccessorGroupDefinition) => {
         operation.description,
         `${operation.method} ${operation.path}`,
         argumentDescription,
+        withContext
+          ? 'Additional accessor call options. The `context` value is passed to the sender for this accessor call.'
+          : 'Additional accessor call options without per-call context.',
         getResponseDocumentationDescription(operation.response)
       ),
       `  readonly ${renderPropertyName(operation.memberName)}: ${signature};`,
@@ -299,17 +314,30 @@ const renderAccessorInterface = (accessorGroup: AccessorGroupDefinition) => {
   });
 
   return renderInterfaceDefinition(
-    accessorGroup.interfaceName,
-    `${accessorGroup.interfaceName} accessor definition.`,
+    withContext
+      ? `${getAccessorWithContextInterfaceName(accessorGroup.interfaceName)}<TAccessorContext>`
+      : accessorGroup.interfaceName,
+    withContext
+      ? `${accessorGroup.interfaceName} accessor definition that requires per-call context values.`
+      : `${accessorGroup.interfaceName} accessor definition.`,
     members
   );
 };
+
+const renderAccessorInterfaces = (accessorGroup: AccessorGroupDefinition) =>
+  [
+    renderAccessorInterface(accessorGroup, false),
+    renderAccessorInterface(accessorGroup, true),
+  ].join('\n\n');
 
 const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
   const lines: string[] = [];
   const push = (value = '') => {
     lines.push(value);
   };
+  const accessorWithContextInterfaceName = getAccessorWithContextInterfaceName(
+    accessorGroup.interfaceName
+  );
 
   push(
     renderTaggedDocumentationComment(
@@ -324,16 +352,20 @@ const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
           {
             description:
               'Context value passed to the sender for every accessor call. This may be ignored depending on the sender.',
-            name: 'context',
+            name: 'interfaceContext',
           },
         ],
         remarks:
-          'The context argument can be omitted when the sender accepts `undefined` as its context type.',
+          'The interfaceContext argument can be omitted when the sender accepts `undefined` as its interface context type. When the sender requires per-call context values, the returned accessor methods require `options.context` for each invocation.',
         typeParams: [
           {
             description:
               'Accessor interface context value type passed to the sender.',
             name: 'TAccessorInterfaceContext',
+          },
+          {
+            description: 'Per-call context value type passed to the sender.',
+            name: 'TAccessorContext',
           },
         ],
         returns: `${accessorGroup.interfaceName} accessor implementation bound to the provided sender.`,
@@ -341,20 +373,35 @@ const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
     )
   );
   push(
-    `export function ${accessorGroup.factoryName}(sender: AccessorSender<undefined>): ${accessorGroup.interfaceName};`
+    `export function ${accessorGroup.factoryName}(sender: AccessorSenderWithoutContext<undefined>): ${accessorGroup.interfaceName};`
   );
   push(
     `export function ${accessorGroup.factoryName}<TAccessorInterfaceContext>(`
   );
-  push('  sender: AccessorSender<TAccessorInterfaceContext>,');
-  push('  context: TAccessorInterfaceContext');
+  push('  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext>,');
+  push('  interfaceContext: TAccessorInterfaceContext');
   push(`): ${accessorGroup.interfaceName};`);
+  push(`export function ${accessorGroup.factoryName}<TAccessorContext>(`);
+  push('  sender: AccessorSenderWithContext<undefined, TAccessorContext>');
+  push(`): ${accessorWithContextInterfaceName}<TAccessorContext>;`);
   push(
-    `export function ${accessorGroup.factoryName}<TAccessorInterfaceContext>(`
+    `export function ${accessorGroup.factoryName}<TAccessorInterfaceContext, TAccessorContext>(`
   );
-  push('  sender: AccessorSender<TAccessorInterfaceContext>,');
-  push('  context?: TAccessorInterfaceContext');
-  push(`): ${accessorGroup.interfaceName} {`);
+  push(
+    '  sender: AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,'
+  );
+  push('  interfaceContext: TAccessorInterfaceContext');
+  push(`): ${accessorWithContextInterfaceName}<TAccessorContext>;`);
+  push(
+    `export function ${accessorGroup.factoryName}<TAccessorInterfaceContext, TAccessorContext>(`
+  );
+  push(
+    '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext> | AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,'
+  );
+  push('  interfaceContext?: TAccessorInterfaceContext');
+  push(
+    `): ${accessorGroup.interfaceName} | ${accessorWithContextInterfaceName}<TAccessorContext> {`
+  );
   push('  return {');
 
   for (const operation of accessorGroup.operations) {
@@ -390,10 +437,12 @@ const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
     push(
       `      body: ${operation.requestBody != null ? (argumentMode === 'optional' ? 'args?.body' : 'args.body') : 'undefined'},`
     );
-    push('    }, context, options),');
+    push('    }, interfaceContext, options),');
   }
 
-  push('  };');
+  push(
+    `  } as ${accessorGroup.interfaceName} | ${accessorWithContextInterfaceName}<TAccessorContext>;`
+  );
   push('}');
   return lines.join('\n');
 };
@@ -581,6 +630,7 @@ const renderOperationDocumentationComment = (
   remarks: string | undefined,
   fallback: string,
   argumentDescription: string | undefined,
+  optionsDescription: string,
   returnDescription: string
 ) => {
   const normalizedSummary = summary?.trim();
@@ -612,12 +662,7 @@ const renderOperationDocumentationComment = (
   if (argumentDescription != null) {
     appendTaggedDocumentationLines(lines, 'param', 'args', argumentDescription);
   }
-  appendTaggedDocumentationLines(
-    lines,
-    'param',
-    'options',
-    'Additional accessor call options.'
-  );
+  appendTaggedDocumentationLines(lines, 'param', 'options', optionsDescription);
   appendTaggedDocumentationLines(lines, 'returns', '', returnDescription);
   lines.push(' */');
 

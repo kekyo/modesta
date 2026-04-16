@@ -148,49 +148,55 @@ describe('operation definition generation', () => {
       getTypeAliasStatement(generatedSource, 'DeleteItem_delete_response')
     ).toBe('export type DeleteItem_delete_response = void;');
     expect(generatedSource).toContain(
-      '_delete: (args: DeleteItem_delete_arguments, options?: AccessorOptions | undefined) => Promise<void>;'
+      '_delete: (args: DeleteItem_delete_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
     );
   });
 
   it('omits args from no-argument accessor signatures', () => {
     expect(generatedSource).toContain(
-      'get: (options?: AccessorOptions | undefined) => Promise<ListItems_get_response>;'
+      'get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ListItems_get_response>;'
     );
     expect(generatedSource).not.toContain(
-      'get: (args?: ListItems_get_arguments | undefined, options?: AccessorOptions | undefined) => Promise<ListItems_get_response>;'
+      'get: (args?: ListItems_get_arguments | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<ListItems_get_response>;'
     );
   });
 
-  it('renders accessor factories as overload functions for bound context', () => {
+  it('renders accessor factories as overload functions for interface and per-call context combinations', () => {
     expect(generatedSource).not.toContain(
       'export type AccessorContextArgument'
     );
     expect(generatedSource).toContain(
       [
-        'export function create_GetRouteValue_accessor(sender: AccessorSender<undefined>): GetRouteValue;',
+        'export function create_GetRouteValue_accessor(sender: AccessorSenderWithoutContext<undefined>): GetRouteValue;',
         'export function create_GetRouteValue_accessor<TAccessorInterfaceContext>(',
-        '  sender: AccessorSender<TAccessorInterfaceContext>,',
-        '  context: TAccessorInterfaceContext',
+        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext>,',
+        '  interfaceContext: TAccessorInterfaceContext',
         '): GetRouteValue;',
-        'export function create_GetRouteValue_accessor<TAccessorInterfaceContext>(',
-        '  sender: AccessorSender<TAccessorInterfaceContext>,',
-        '  context?: TAccessorInterfaceContext',
-        '): GetRouteValue {',
+        'export function create_GetRouteValue_accessor<TAccessorContext>(',
+        '  sender: AccessorSenderWithContext<undefined, TAccessorContext>',
+        '): GetRouteValue_with_context<TAccessorContext>;',
+        'export function create_GetRouteValue_accessor<TAccessorInterfaceContext, TAccessorContext>(',
+        '  sender: AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
+        '  interfaceContext: TAccessorInterfaceContext',
+        '): GetRouteValue_with_context<TAccessorContext>;',
+        'export function create_GetRouteValue_accessor<TAccessorInterfaceContext, TAccessorContext>(',
+        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext> | AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
+        '  interfaceContext?: TAccessorInterfaceContext',
+        '): GetRouteValue | GetRouteValue_with_context<TAccessorContext> {',
       ].join('\n')
     );
   });
 
-  it('allows omitted context through overloads when the sender context type includes undefined', () => {
+  it('renders paired accessor interfaces for with and without per-call context', () => {
+    expect(generatedSource).toContain('export interface DeleteItem {');
     expect(generatedSource).toContain(
-      'export function create_DeleteItem_accessor(sender: AccessorSender<undefined>): DeleteItem;'
+      'readonly _delete: (args: DeleteItem_delete_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
     );
     expect(generatedSource).toContain(
-      [
-        'export function create_DeleteItem_accessor<TAccessorInterfaceContext>(',
-        '  sender: AccessorSender<TAccessorInterfaceContext>,',
-        '  context?: TAccessorInterfaceContext',
-        '): DeleteItem {',
-      ].join('\n')
+      'export interface DeleteItem_with_context<TAccessorContext> {'
+    );
+    expect(generatedSource).toContain(
+      'readonly _delete: (args: DeleteItem_delete_arguments, options: AccessorOptionsWithContext<TAccessorContext>) => Promise<void>;'
     );
   });
 
@@ -325,6 +331,52 @@ describe('operation definition generation', () => {
       },
       undefined,
       undefined
+    );
+  });
+
+  it('passes per-call context values to sender calls when requested by the sender type', async () => {
+    const signal = new AbortController().signal;
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor = generatedModule.create_CreateItem_accessor(sender, {
+      traceId: 'trace-42',
+    });
+
+    await accessor.post(
+      {
+        body: {
+          name: 'alpha',
+        },
+      },
+      {
+        context: {
+          requestId: 'request-99',
+        },
+        signal,
+      }
+    );
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'CreateItem.post',
+        method: 'POST',
+        url: '/body',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: {
+          name: 'alpha',
+        },
+      },
+      {
+        traceId: 'trace-42',
+      },
+      {
+        context: {
+          requestId: 'request-99',
+        },
+        signal,
+      }
     );
   });
 

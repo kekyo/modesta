@@ -148,36 +148,55 @@ describe('operation definition generation', () => {
       getTypeAliasStatement(generatedSource, 'DeleteItem_delete_response')
     ).toBe('export type DeleteItem_delete_response = void;');
     expect(generatedSource).toContain(
-      '_delete: (args: DeleteItem_delete_arguments, signal?: AbortSignal | undefined) => Promise<void>;'
+      '_delete: (args: DeleteItem_delete_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
     );
   });
 
   it('omits args from no-argument accessor signatures', () => {
     expect(generatedSource).toContain(
-      'get: (signal?: AbortSignal | undefined) => Promise<ListItems_get_response>;'
+      'get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ListItems_get_response>;'
     );
     expect(generatedSource).not.toContain(
-      'get: (args?: ListItems_get_arguments | undefined, signal?: AbortSignal | undefined) => Promise<ListItems_get_response>;'
+      'get: (args?: ListItems_get_arguments | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<ListItems_get_response>;'
     );
   });
 
-  it('uses a helper type for bound accessor context', () => {
-    expect(
-      getTypeAliasStatement(generatedSource, 'AccessorContextArgument')
-    ).toBe(
-      [
-        'export type AccessorContextArgument<TContext> = [TContext] extends [undefined]',
-        '    ? [context?: TContext]',
-        '    : [context: TContext];',
-      ].join('\n')
+  it('renders accessor factories as overload functions for interface and per-call context combinations', () => {
+    expect(generatedSource).not.toContain(
+      'export type AccessorContextArgument'
     );
     expect(generatedSource).toContain(
       [
-        'export const create_GetRouteValue_accessor = <TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  ...[context]: AccessorContextArgument<TContext>',
-        '): GetRouteValue => ({',
+        'export function create_GetRouteValue_accessor(sender: AccessorSenderWithoutContext<undefined>): GetRouteValue;',
+        'export function create_GetRouteValue_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext>,',
+        '  interfaceContext: TAccessorInterfaceContext',
+        '): GetRouteValue;',
+        'export function create_GetRouteValue_accessor<TAccessorContext>(',
+        '  sender: AccessorSenderWithContext<undefined, TAccessorContext>',
+        '): GetRouteValue_with_context<TAccessorContext>;',
+        'export function create_GetRouteValue_accessor<TAccessorInterfaceContext, TAccessorContext>(',
+        '  sender: AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
+        '  interfaceContext: TAccessorInterfaceContext',
+        '): GetRouteValue_with_context<TAccessorContext>;',
+        'export function create_GetRouteValue_accessor<TAccessorInterfaceContext, TAccessorContext>(',
+        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext> | AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
+        '  interfaceContext?: TAccessorInterfaceContext',
+        '): GetRouteValue | GetRouteValue_with_context<TAccessorContext> {',
       ].join('\n')
+    );
+  });
+
+  it('renders paired accessor interfaces for with and without per-call context', () => {
+    expect(generatedSource).toContain('export interface DeleteItem {');
+    expect(generatedSource).toContain(
+      'readonly _delete: (args: DeleteItem_delete_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
+    );
+    expect(generatedSource).toContain(
+      'export interface DeleteItem_with_context<TAccessorContext> {'
+    );
+    expect(generatedSource).toContain(
+      'readonly _delete: (args: DeleteItem_delete_arguments, options: AccessorOptionsWithContext<TAccessorContext>) => Promise<void>;'
     );
   });
 
@@ -190,7 +209,7 @@ describe('operation definition generation', () => {
       {
         id: '42',
       },
-      signal
+      { signal }
     );
 
     expect(sender).toHaveBeenCalledWith(
@@ -204,7 +223,7 @@ describe('operation definition generation', () => {
         body: undefined,
       },
       undefined,
-      signal
+      { signal }
     );
   });
 
@@ -235,16 +254,16 @@ describe('operation definition generation', () => {
 
   it('builds sender descriptors for operations without arguments', async () => {
     const sender = vi.fn(
-      async (request: unknown, context: unknown, signal: unknown) => ({
+      async (request: unknown, context: unknown, options: unknown) => ({
         request,
         context,
-        signal,
+        options,
       })
     );
     const accessor = generatedModule.create_ListItems_accessor(sender);
     const signal = new AbortController().signal;
 
-    await accessor.get(signal);
+    await accessor.get({ signal });
 
     expect(sender).toHaveBeenCalledWith(
       {
@@ -257,7 +276,7 @@ describe('operation definition generation', () => {
         body: undefined,
       },
       undefined,
-      signal
+      { signal }
     );
   });
 
@@ -312,6 +331,52 @@ describe('operation definition generation', () => {
       },
       undefined,
       undefined
+    );
+  });
+
+  it('passes per-call context values to sender calls when requested by the sender type', async () => {
+    const signal = new AbortController().signal;
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor = generatedModule.create_CreateItem_accessor(sender, {
+      traceId: 'trace-42',
+    });
+
+    await accessor.post(
+      {
+        body: {
+          name: 'alpha',
+        },
+      },
+      {
+        context: {
+          requestId: 'request-99',
+        },
+        signal,
+      }
+    );
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'CreateItem.post',
+        method: 'POST',
+        url: '/body',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: {
+          name: 'alpha',
+        },
+      },
+      {
+        traceId: 'trace-42',
+      },
+      {
+        context: {
+          requestId: 'request-99',
+        },
+        signal,
+      }
     );
   });
 
@@ -386,7 +451,7 @@ describe('operation definition generation', () => {
       {
         id: '42',
       },
-      signal
+      { signal }
     );
 
     expect(result).toEqual({

@@ -4,7 +4,7 @@
 // https://github.com/kekyo/modesta/
 
 import { createServer } from 'http';
-import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { basename, join, resolve } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
@@ -130,23 +130,56 @@ describe('CLI and format support', () => {
     expect(generatedSource).toContain('export interface ListSummaries {');
     expect(generatedSource).toContain(
       [
-        'export const create_LookupSummaries_accessor = <TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  ...[context]: AccessorContextArgument<TContext>',
-        '): LookupSummaries => ({',
+        'export function create_LookupSummaries_accessor(sender: AccessorSenderWithoutContext<undefined>): LookupSummaries;',
+        'export function create_LookupSummaries_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext>,',
+        '  interfaceContext: TAccessorInterfaceContext',
+        '): LookupSummaries;',
+        'export function create_LookupSummaries_accessor<TAccessorContext>(',
+        '  sender: AccessorSenderWithContext<undefined, TAccessorContext>',
+        '): LookupSummaries_with_context<TAccessorContext>;',
+        'export function create_LookupSummaries_accessor<TAccessorInterfaceContext, TAccessorContext>(',
+        '  sender: AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
+        '  interfaceContext: TAccessorInterfaceContext',
+        '): LookupSummaries_with_context<TAccessorContext>;',
+        'export function create_LookupSummaries_accessor<TAccessorInterfaceContext, TAccessorContext>(',
+        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext> | AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
+        '  interfaceContext?: TAccessorInterfaceContext',
+        '): LookupSummaries | LookupSummaries_with_context<TAccessorContext> {',
       ].join('\n')
     );
     expect(generatedSource).toContain(
       [
-        'export const create_ListSummaries_accessor = <TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  ...[context]: AccessorContextArgument<TContext>',
-        '): ListSummaries => ({',
+        'export function create_ListSummaries_accessor(sender: AccessorSenderWithoutContext<undefined>): ListSummaries;',
+        'export function create_ListSummaries_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext>,',
+        '  interfaceContext: TAccessorInterfaceContext',
+        '): ListSummaries;',
+        'export function create_ListSummaries_accessor<TAccessorContext>(',
+        '  sender: AccessorSenderWithContext<undefined, TAccessorContext>',
+        '): ListSummaries_with_context<TAccessorContext>;',
+        'export function create_ListSummaries_accessor<TAccessorInterfaceContext, TAccessorContext>(',
+        '  sender: AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
+        '  interfaceContext: TAccessorInterfaceContext',
+        '): ListSummaries_with_context<TAccessorContext>;',
+        'export function create_ListSummaries_accessor<TAccessorInterfaceContext, TAccessorContext>(',
+        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext> | AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
+        '  interfaceContext?: TAccessorInterfaceContext',
+        '): ListSummaries | ListSummaries_with_context<TAccessorContext> {',
       ].join('\n')
     );
     expect(generatedSource).toContain(
-      'export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSender<undefined> => {'
+      'export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSenderWithoutContext<undefined> => {'
     );
+  });
+
+  it('does not emit asset sources as build outputs', async () => {
+    await expect(
+      stat(resolve(process.cwd(), 'dist/src/assets/runtime.d.ts'))
+    ).rejects.toThrow();
+    await expect(
+      stat(resolve(process.cwd(), 'dist/src/assets/runtime.d.ts.map'))
+    ).rejects.toThrow();
   });
 
   it('writes generated source to stdout when only the input path is provided', async () => {
@@ -201,10 +234,22 @@ describe('CLI and format support', () => {
     expect(stdout).toContain('export interface ListSummaries {');
     expect(stdout).toContain(
       [
-        'export const create_LookupSummaries_accessor = <TContext>(',
-        '  sender: AccessorSender<TContext>,',
-        '  ...[context]: AccessorContextArgument<TContext>',
-        '): LookupSummaries => ({',
+        'export function create_LookupSummaries_accessor(sender: AccessorSenderWithoutContext<undefined>): LookupSummaries;',
+        'export function create_LookupSummaries_accessor<TAccessorInterfaceContext>(',
+        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext>,',
+        '  interfaceContext: TAccessorInterfaceContext',
+        '): LookupSummaries;',
+        'export function create_LookupSummaries_accessor<TAccessorContext>(',
+        '  sender: AccessorSenderWithContext<undefined, TAccessorContext>',
+        '): LookupSummaries_with_context<TAccessorContext>;',
+        'export function create_LookupSummaries_accessor<TAccessorInterfaceContext, TAccessorContext>(',
+        '  sender: AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
+        '  interfaceContext: TAccessorInterfaceContext',
+        '): LookupSummaries_with_context<TAccessorContext>;',
+        'export function create_LookupSummaries_accessor<TAccessorInterfaceContext, TAccessorContext>(',
+        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext> | AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
+        '  interfaceContext?: TAccessorInterfaceContext',
+        '): LookupSummaries | LookupSummaries_with_context<TAccessorContext> {',
       ].join('\n')
     );
     expect(stdout).not.toContain('// Source file:');
@@ -402,7 +447,7 @@ describe('CLI and format support', () => {
       expect(fromYaml).toBe(fromJson);
       expect(fromJson).toContain('export interface LookupSummaries {');
       expect(fromJson).toContain(
-        'readonly post: (args: LookupSummaries_post_arguments, signal?: AbortSignal | undefined) => Promise<LookupSummaries_post_response>;'
+        'readonly post: (args: LookupSummaries_post_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<LookupSummaries_post_response>;'
       );
       expect(fromJson).toContain('[key: string]: SummaryItem;');
       expect(fromJson).toContain('recordedAt: string;');

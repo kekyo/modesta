@@ -38,7 +38,7 @@ const findDocumentationBeforeIndex = (
 
 const findInterfaceDeclaration = (source: string, interfaceName: string) => {
   const pattern = new RegExp(
-    `export interface ${escapeRegExp(interfaceName)}(?:<[^\\n{]+>)? \\{`,
+    `export interface ${escapeRegExp(interfaceName)}(?:<[^\\n{]+>)?(?:\\s+extends[^{]+)?\\s*\\{`,
     'u'
   );
   const match = pattern.exec(source);
@@ -195,6 +195,23 @@ export const getConstDocumentation = (source: string, constName: string) => {
     source,
     constIndex,
     `const '${constName}'`
+  );
+};
+
+export const getFunctionDocumentation = (
+  source: string,
+  functionName: string
+) => {
+  const marker = `export function ${functionName}`;
+  const functionIndex = source.indexOf(marker);
+  if (functionIndex < 0) {
+    throw new Error(`Could not find function '${functionName}'.`);
+  }
+
+  return findDocumentationBeforeIndex(
+    source,
+    functionIndex,
+    `function '${functionName}'`
   );
 };
 

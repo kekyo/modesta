@@ -14,6 +14,7 @@ import {
   getConstDocumentation,
   expectMemberDocumentation,
   expectMethodDocumentation,
+  getFunctionDocumentation,
   getInterfaceBlock,
   getInterfaceDocumentation,
   getTypeAliasDocumentation,
@@ -225,7 +226,7 @@ describe('xml comments integration', () => {
         ' * @remarks First detail line.',
         ' * Second detail line.',
         ' * @param args Optional arguments for GET /xml-comments/documented.',
-        ' * @param signal Abort signal used to cancel the request.',
+        ' * @param options Additional accessor call options without per-call context.',
         ' * @returns XML documented success response.',
         ' */',
       ].join('\n')
@@ -237,7 +238,7 @@ describe('xml comments integration', () => {
         '/**',
         ' * Creates a documented response.',
         ' * @param args Optional arguments for POST /xml-comments/documented.',
-        ' * @param signal Abort signal used to cancel the request.',
+        ' * @param options Additional accessor call options without per-call context.',
         ' * @returns XML documented create response.',
         ' */',
       ].join('\n')
@@ -248,7 +249,7 @@ describe('xml comments integration', () => {
       [
         '/**',
         ' * Returns a response documented only by the returns tag.',
-        ' * @param signal Abort signal used to cancel the request.',
+        ' * @param options Additional accessor call options without per-call context.',
         ' * @returns OK',
         ' */',
       ].join('\n')
@@ -304,31 +305,63 @@ describe('xml comments integration', () => {
       'body',
       '/** Request body payload passed to the sender. */'
     );
-
-    expect(getTypeAliasDocumentation(generatedSource, 'AccessorSender')).toBe(
+    expect(getInterfaceDocumentation(generatedSource, 'AccessorOptions')).toBe(
+      '/** Shared options accepted by generated accessor methods. */'
+    );
+    expect(
+      getInterfaceDocumentation(
+        generatedSource,
+        'AccessorOptionsWithoutContext'
+      )
+    ).toBe(
+      '/** Additional options accepted by accessors that do not use per-call context values. */'
+    );
+    expect(
+      getInterfaceDocumentation(generatedSource, 'AccessorOptionsWithContext')
+    ).toBe(
       [
         '/**',
-        ' * Sender function used by generated accessors.',
+        ' * Additional options accepted by accessors that require a per-call context value.',
+        ' * @typeParam TAccessorContext Per-call context value type passed to the sender.',
+        ' */',
+      ].join('\n')
+    );
+
+    expect(
+      getTypeAliasDocumentation(generatedSource, 'AccessorSenderWithoutContext')
+    ).toBe(
+      [
+        '/**',
+        ' * Sender function used by generated accessors that do not require per-call context values.',
         ' * @typeParam TResponse Response payload type.',
         ' * @typeParam TRequestBody Request body payload type.',
-        ' * @typeParam TContext Context value type passed to the sender.',
+        ' * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.',
         ' * @param request Prepared request descriptor.',
-        ' * @param context Context value bound when creating the accessor implementation.',
-        ' * @param signal Abort signal used to cancel the request.',
+        ' * @param interfaceContext Context value bound when creating the accessor implementation.',
+        ' * @param options Additional accessor call options without per-call context.',
         ' * @returns Promise that resolves to the typed response payload.',
         ' */',
       ].join('\n')
     );
     expect(
-      getTypeAliasDocumentation(generatedSource, 'AccessorContextArgument')
+      getTypeAliasDocumentation(generatedSource, 'AccessorSenderWithContext')
     ).toBe(
       [
         '/**',
-        ' * Tuple type that controls whether a bound accessor context argument is required.',
-        ' * @typeParam TContext Context value type passed to the sender.',
-        ' * @remarks When `TContext` is `undefined`, the tuple allows the context argument to be omitted.',
+        ' * Sender function used by generated accessors that require per-call context values.',
+        ' * @typeParam TResponse Response payload type.',
+        ' * @typeParam TRequestBody Request body payload type.',
+        ' * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.',
+        ' * @typeParam TAccessorContext Per-call context value type passed to the sender.',
+        ' * @param request Prepared request descriptor.',
+        ' * @param interfaceContext Context value bound when creating the accessor implementation.',
+        ' * @param options Additional accessor call options with per-call context.',
+        ' * @returns Promise that resolves to the typed response payload.',
         ' */',
       ].join('\n')
+    );
+    expect(generatedSource).not.toContain(
+      'export type AccessorContextArgument'
     );
 
     expect(
@@ -362,21 +395,22 @@ describe('xml comments integration', () => {
         ' * @param options Options that configure the fetch-based sender.',
         ' * @returns Sender implementation that executes requests via the fetch API.',
         ' * @remarks When `options.fetch` is omitted, `globalThis.fetch` must be available.',
-        ' * Accessor context values are ignored by this sender implementation.',
+        ' * Accessor interface context values are ignored by this sender implementation.',
         ' */',
       ].join('\n')
     );
     expect(
-      getConstDocumentation(generatedSource, 'create_xml_comments_accessor')
+      getFunctionDocumentation(generatedSource, 'create_xml_comments_accessor')
     ).toBe(
       [
         '/**',
         ' * Creates a xml_comments accessor implementation.',
-        ' * @typeParam TContext Context value type passed to the sender.',
+        ' * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.',
+        ' * @typeParam TAccessorContext Per-call context value type passed to the sender.',
         ' * @param sender Sender implementation used to execute generated requests.',
-        ' * @param context Context value passed to the sender for every accessor call. This may be ignored depending on the sender.',
+        ' * @param interfaceContext Context value passed to the sender for every accessor call. This may be ignored depending on the sender.',
         ' * @returns xml_comments accessor implementation bound to the provided sender.',
-        ' * @remarks The context argument can be omitted only when `TContext` is `undefined`.',
+        ' * @remarks The interfaceContext argument can be omitted when the sender accepts `undefined` as its interface context type. When the sender requires per-call context values, the returned accessor methods require `options.context` for each invocation.',
         ' */',
       ].join('\n')
     );

@@ -35,6 +35,7 @@ import {
 import { version } from '../generated/packageMetadata';
 import { basename } from 'path';
 import { fileURLToPath } from 'url';
+import runtimeSource from '../assets/runtime.ts?raw';
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -78,292 +79,7 @@ export const renderApiDefinition = (
     push(`// Source file: ${anonymizeSourceFileDisplay(api.source)}`);
   }
   push();
-  push(
-    '/////////////////////////////////////////////////////////////////////////////////'
-  );
-  push();
-
-  push(
-    renderInterfaceDefinition(
-      'AccessorRequestDescriptor<TRequestBody>',
-      'Prepared request descriptor used by generated accessors.',
-      [
-        renderInterfaceMember(
-          'operationName',
-          'string',
-          false,
-          'Stable operation name used for diagnostics and tracing.'
-        ),
-        renderInterfaceMember(
-          'method',
-          'string',
-          false,
-          'HTTP method sent to the endpoint.'
-        ),
-        renderInterfaceMember(
-          'url',
-          'string',
-          false,
-          'Relative request URL including path and query string.'
-        ),
-        renderInterfaceMember(
-          'headers',
-          'Record<string, string>',
-          false,
-          'HTTP headers applied to the outgoing request.'
-        ),
-        renderInterfaceMember(
-          'body',
-          'TRequestBody | undefined',
-          false,
-          'Request body payload passed to the sender.'
-        ),
-      ],
-      [
-        {
-          description: 'Request body payload type.',
-          name: 'TRequestBody',
-        },
-      ]
-    )
-  );
-  push();
-
-  push(
-    renderTaggedDocumentationComment(
-      'Sender function used by generated accessors.',
-      {
-        params: [
-          {
-            description: 'Prepared request descriptor.',
-            name: 'request',
-          },
-          {
-            description:
-              'Context value bound when creating the accessor implementation.',
-            name: 'context',
-          },
-          {
-            description: 'Abort signal used to cancel the request.',
-            name: 'signal',
-          },
-        ],
-        returns: 'Promise that resolves to the typed response payload.',
-        typeParams: [
-          {
-            description: 'Response payload type.',
-            name: 'TResponse',
-          },
-          {
-            description: 'Request body payload type.',
-            name: 'TRequestBody',
-          },
-          {
-            description: 'Context value type passed to the sender.',
-            name: 'TContext',
-          },
-        ],
-      }
-    )
-  );
-  push('export type AccessorSender<TContext> = <TResponse, TRequestBody>(');
-  push('  request: AccessorRequestDescriptor<TRequestBody>,');
-  push('  context: TContext | undefined,');
-  push('  signal: AbortSignal | undefined) => Promise<TResponse>;');
-  push();
-  push(
-    renderTaggedDocumentationComment(
-      'Tuple type that controls whether a bound accessor context argument is required.',
-      {
-        remarks:
-          'When `TContext` is `undefined`, the tuple allows the context argument to be omitted.',
-        typeParams: [
-          {
-            description: 'Context value type passed to the sender.',
-            name: 'TContext',
-          },
-        ],
-      }
-    )
-  );
-  push(
-    'export type AccessorContextArgument<TContext> = [TContext] extends [undefined]'
-  );
-  push('    ? [context?: TContext]');
-  push('    : [context: TContext];');
-  push();
-  push(
-    renderInterfaceDefinition(
-      'CreateFetchSenderOptions',
-      'Options that configure the fetch-based sender.',
-      [
-        renderInterfaceMember(
-          'baseUrl',
-          'string | URL',
-          false,
-          'Base URL used to resolve generated accessor request URLs.'
-        ),
-        renderInterfaceMember(
-          'fetch',
-          'typeof fetch | undefined',
-          true,
-          'Fetch implementation to use. Defaults to globalThis.fetch.'
-        ),
-        renderInterfaceMember(
-          'headers',
-          'Record<string, string> | undefined',
-          true,
-          'Default headers merged with per-request headers.'
-        ),
-        renderInterfaceMember(
-          'init',
-          "Omit<RequestInit, 'body' | 'headers' | 'method' | 'signal'> | undefined",
-          true,
-          'Additional RequestInit values merged into every request. Generated accessors continue to control body, headers, method, and signal.'
-        ),
-      ]
-    )
-  );
-  push();
-  push(
-    '/////////////////////////////////////////////////////////////////////////////////'
-  );
-  push();
-  push("const modestaUrlBase = 'http://modesta.invalid';");
-  push('const modestaJsonMediaTypePattern = /json/i;');
-  push();
-  push(
-    'const modestaBuildUrl = (path: string, pathParameters: Record<string, unknown>, queryParameters: Record<string, unknown>) => {'
-  );
-  push('  let resolvedPath = path;');
-  push('  for (const [key, value] of Object.entries(pathParameters)) {');
-  push(
-    '    resolvedPath = resolvedPath.replaceAll(`{${key}}`, encodeURIComponent(String(value)));'
-  );
-  push('  }');
-  push('  const url = new URL(resolvedPath, modestaUrlBase);');
-  push('  for (const [key, value] of Object.entries(queryParameters)) {');
-  push('    if (value != null) {');
-  push('      url.searchParams.set(key, String(value));');
-  push('    }');
-  push('  }');
-  push('  return `${url.pathname}${url.search}`;');
-  push('};');
-  push();
-  push(
-    'const modestaBuildHeaders = (headerParameters: Record<string, unknown>, contentType: string | undefined, accept: string | undefined) => {'
-  );
-  push('  const headers: Record<string, string> = {};');
-  push('  for (const [key, value] of Object.entries(headerParameters)) {');
-  push('    if (value != null) {');
-  push('      headers[key] = String(value);');
-  push('    }');
-  push('  }');
-  push('  if (contentType != null) {');
-  push("    headers['content-type'] = contentType;");
-  push('  }');
-  push('  if (accept != null) {');
-  push('    headers.accept = accept;');
-  push('  }');
-  push('  return headers;');
-  push('};');
-  push();
-  push(
-    'const modestaSerializeFetchBody = (body: unknown, contentType: string | undefined) => {'
-  );
-  push('  if (body == null) {');
-  push('    return undefined;');
-  push('  }');
-  push(
-    '  return contentType != null && modestaJsonMediaTypePattern.test(contentType)'
-  );
-  push('    ? JSON.stringify(body)');
-  push('    : body;');
-  push('};');
-  push();
-  push(
-    '/////////////////////////////////////////////////////////////////////////////////'
-  );
-  push();
-  push(
-    renderTaggedDocumentationComment(
-      'Creates a sender implementation backed by the fetch API.',
-      {
-        params: [
-          {
-            description: 'Options that configure the fetch-based sender.',
-            name: 'options',
-          },
-        ],
-        remarks:
-          'When `options.fetch` is omitted, `globalThis.fetch` must be available.\nAccessor context values are ignored by this sender implementation.',
-        returns:
-          'Sender implementation that executes requests via the fetch API.',
-      }
-    )
-  );
-  push(
-    'export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSender<undefined> => {'
-  );
-  push('  const fetchImplementation = options.fetch ?? globalThis.fetch;');
-  push("  if (typeof fetchImplementation !== 'function') {");
-  push(
-    "    throw new Error('Fetch implementation is not available. Pass CreateFetchSenderOptions.fetch explicitly.');"
-  );
-  push('  }');
-  push();
-  push(
-    '  return async <TResponse, TRequestBody>(request: AccessorRequestDescriptor<TRequestBody>, _context: undefined, signal: AbortSignal | undefined) => {'
-  );
-  push('    const response = await fetchImplementation(');
-  push('      new URL(request.url, options.baseUrl),');
-  push('      {');
-  push('        ...(options.init ?? {}),');
-  push('        method: request.method,');
-  push('        headers: {');
-  push('          ...(options.headers ?? {}),');
-  push('          ...request.headers,');
-  push('        },');
-  push(
-    "        body: modestaSerializeFetchBody(request.body, request.headers['content-type']),"
-  );
-  push('        signal,');
-  push('      }');
-  push('    );');
-  push();
-  push('    if (response.ok === false) {');
-  push('      const responseText = await response.text();');
-  push('      const statusText = response.statusText.length > 0');
-  push('        ? ` ${response.statusText}`');
-  push("        : '';");
-  push('      throw new Error(');
-  push('        responseText.length > 0');
-  push(
-    '          ? `Fetch request failed with ${response.status}${statusText}: ${responseText}`'
-  );
-  push(
-    '          : `Fetch request failed with ${response.status}${statusText}.`'
-  );
-  push('      );');
-  push('    }');
-  push();
-  push('    const responseText = await response.text();');
-  push('    if (responseText.length === 0) {');
-  push('      return undefined as TResponse;');
-  push('    }');
-  push();
-  push("    const responseContentType = response.headers.get('content-type');");
-  push(
-    '    return (responseContentType != null && modestaJsonMediaTypePattern.test(responseContentType)'
-  );
-  push('      ? JSON.parse(responseText)');
-  push('      : responseText) as TResponse;');
-  push('  };');
-  push('};');
-  push();
-  push(
-    '/////////////////////////////////////////////////////////////////////////////////'
-  );
+  push(runtimeSource.trimEnd());
   push();
 
   if (api.schemaDefinitions.length > 0) {
@@ -379,7 +95,7 @@ export const renderApiDefinition = (
       push();
     }
 
-    push(renderAccessorInterface(accessorGroup));
+    push(renderAccessorInterfaces(accessorGroup));
     push();
     push(renderAccessorFactory(accessorGroup));
     push();
@@ -550,17 +266,29 @@ const renderResponseDefinition = (
   );
 };
 
-const renderAccessorInterface = (accessorGroup: AccessorGroupDefinition) => {
+const getAccessorWithContextInterfaceName = (interfaceName: string) =>
+  `${interfaceName}_with_context`;
+
+const renderAccessorInterface = (
+  accessorGroup: AccessorGroupDefinition,
+  withContext: boolean
+) => {
   const members = accessorGroup.operations.map((operation) => {
     const argumentMode = getOperationArgumentMode(operation);
+    const optionsType = withContext
+      ? 'AccessorOptionsWithContext<TAccessorContext>'
+      : 'AccessorOptionsWithoutContext';
+    const optionsArgument = withContext
+      ? `options: ${optionsType}`
+      : `options?: ${optionsType} | undefined`;
     const signature =
       argumentMode === 'none'
-        ? `(signal?: AbortSignal | undefined) => Promise<${getOperationResponseTypeExpression(operation.response)}>`
+        ? `(${optionsArgument}) => Promise<${getOperationResponseTypeExpression(operation.response)}>`
         : `(${[
             argumentMode === 'required'
               ? `args: ${operation.argumentsTypeName}`
               : `args?: ${operation.argumentsTypeName} | undefined`,
-            'signal?: AbortSignal | undefined',
+            optionsArgument,
           ].join(
             ', '
           )}) => Promise<${getOperationResponseTypeExpression(operation.response)}>`;
@@ -576,6 +304,9 @@ const renderAccessorInterface = (accessorGroup: AccessorGroupDefinition) => {
         operation.description,
         `${operation.method} ${operation.path}`,
         argumentDescription,
+        withContext
+          ? 'Additional accessor call options. The `context` value is passed to the sender for this accessor call.'
+          : 'Additional accessor call options without per-call context.',
         getResponseDocumentationDescription(operation.response)
       ),
       `  readonly ${renderPropertyName(operation.memberName)}: ${signature};`,
@@ -583,17 +314,30 @@ const renderAccessorInterface = (accessorGroup: AccessorGroupDefinition) => {
   });
 
   return renderInterfaceDefinition(
-    accessorGroup.interfaceName,
-    `${accessorGroup.interfaceName} accessor definition.`,
+    withContext
+      ? `${getAccessorWithContextInterfaceName(accessorGroup.interfaceName)}<TAccessorContext>`
+      : accessorGroup.interfaceName,
+    withContext
+      ? `${accessorGroup.interfaceName} accessor definition that requires per-call context values.`
+      : `${accessorGroup.interfaceName} accessor definition.`,
     members
   );
 };
+
+const renderAccessorInterfaces = (accessorGroup: AccessorGroupDefinition) =>
+  [
+    renderAccessorInterface(accessorGroup, false),
+    renderAccessorInterface(accessorGroup, true),
+  ].join('\n\n');
 
 const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
   const lines: string[] = [];
   const push = (value = '') => {
     lines.push(value);
   };
+  const accessorWithContextInterfaceName = getAccessorWithContextInterfaceName(
+    accessorGroup.interfaceName
+  );
 
   push(
     renderTaggedDocumentationComment(
@@ -608,44 +352,76 @@ const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
           {
             description:
               'Context value passed to the sender for every accessor call. This may be ignored depending on the sender.',
-            name: 'context',
+            name: 'interfaceContext',
           },
         ],
         remarks:
-          'The context argument can be omitted only when `TContext` is `undefined`.',
+          'The interfaceContext argument can be omitted when the sender accepts `undefined` as its interface context type. When the sender requires per-call context values, the returned accessor methods require `options.context` for each invocation.',
         typeParams: [
           {
-            description: 'Context value type passed to the sender.',
-            name: 'TContext',
+            description:
+              'Accessor interface context value type passed to the sender.',
+            name: 'TAccessorInterfaceContext',
+          },
+          {
+            description: 'Per-call context value type passed to the sender.',
+            name: 'TAccessorContext',
           },
         ],
         returns: `${accessorGroup.interfaceName} accessor implementation bound to the provided sender.`,
       }
     )
   );
-  push(`export const ${accessorGroup.factoryName} = <TContext>(`);
-  push('  sender: AccessorSender<TContext>,');
-  push('  ...[context]: AccessorContextArgument<TContext>');
-  push(`): ${accessorGroup.interfaceName} => ({`);
+  push(
+    `export function ${accessorGroup.factoryName}(sender: AccessorSenderWithoutContext<undefined>): ${accessorGroup.interfaceName};`
+  );
+  push(
+    `export function ${accessorGroup.factoryName}<TAccessorInterfaceContext>(`
+  );
+  push('  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext>,');
+  push('  interfaceContext: TAccessorInterfaceContext');
+  push(`): ${accessorGroup.interfaceName};`);
+  push(`export function ${accessorGroup.factoryName}<TAccessorContext>(`);
+  push('  sender: AccessorSenderWithContext<undefined, TAccessorContext>');
+  push(`): ${accessorWithContextInterfaceName}<TAccessorContext>;`);
+  push(
+    `export function ${accessorGroup.factoryName}<TAccessorInterfaceContext, TAccessorContext>(`
+  );
+  push(
+    '  sender: AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,'
+  );
+  push('  interfaceContext: TAccessorInterfaceContext');
+  push(`): ${accessorWithContextInterfaceName}<TAccessorContext>;`);
+  push(
+    `export function ${accessorGroup.factoryName}<TAccessorInterfaceContext, TAccessorContext>(`
+  );
+  push(
+    '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext> | AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,'
+  );
+  push('  interfaceContext?: TAccessorInterfaceContext');
+  push(
+    `): ${accessorGroup.interfaceName} | ${accessorWithContextInterfaceName}<TAccessorContext> {`
+  );
+  push('  return {');
 
   for (const operation of accessorGroup.operations) {
     const argumentMode = getOperationArgumentMode(operation);
     const argumentToken =
       argumentMode === 'none'
-        ? 'signal'
+        ? 'options'
         : argumentMode === 'required'
-          ? 'args, signal'
-          : 'args, signal';
+          ? 'args, options'
+          : 'args, options';
 
     push(
-      `  ${renderPropertyName(operation.memberName)}: async (${argumentToken}) => sender<${getOperationResponseTypeExpression(operation.response)}, ${operation.requestBody?.typeName ?? 'undefined'}>({`
+      `    ${renderPropertyName(operation.memberName)}: async (${argumentToken}) => sender<${getOperationResponseTypeExpression(operation.response)}, ${operation.requestBody?.typeName ?? 'undefined'}>({`
     );
     push(
-      `    operationName: ${renderLiteral(operation.descriptorOperationName)},`
+      `      operationName: ${renderLiteral(operation.descriptorOperationName)},`
     );
-    push(`    method: ${renderLiteral(operation.method)},`);
+    push(`      method: ${renderLiteral(operation.method)},`);
     push(
-      `    url: modestaBuildUrl(${[
+      `      url: modestaBuildUrl(${[
         renderLiteral(operation.path),
         renderPathParameterArgumentObject(operation),
         operation.queryParameters.length > 0
@@ -656,15 +432,18 @@ const renderAccessorFactory = (accessorGroup: AccessorGroupDefinition) => {
       ].join(', ')}),`
     );
     push(
-      `    headers: modestaBuildHeaders(${operation.headerParameters.length > 0 ? (argumentMode === 'optional' ? 'args?.headerParameters ?? {}' : 'args.headerParameters ?? {}') : '{}'}, ${operation.requestBody?.contentType != null ? renderLiteral(operation.requestBody.contentType) : 'undefined'}, ${operation.response.accept != null ? renderLiteral(operation.response.accept) : 'undefined'}),`
+      `      headers: modestaBuildHeaders(${operation.headerParameters.length > 0 ? (argumentMode === 'optional' ? 'args?.headerParameters ?? {}' : 'args.headerParameters ?? {}') : '{}'}, ${operation.requestBody?.contentType != null ? renderLiteral(operation.requestBody.contentType) : 'undefined'}, ${operation.response.accept != null ? renderLiteral(operation.response.accept) : 'undefined'}),`
     );
     push(
-      `    body: ${operation.requestBody != null ? (argumentMode === 'optional' ? 'args?.body' : 'args.body') : 'undefined'},`
+      `      body: ${operation.requestBody != null ? (argumentMode === 'optional' ? 'args?.body' : 'args.body') : 'undefined'},`
     );
-    push('  }, context, signal),');
+    push('    }, interfaceContext, options),');
   }
 
-  push('});');
+  push(
+    `  } as ${accessorGroup.interfaceName} | ${accessorWithContextInterfaceName}<TAccessorContext>;`
+  );
+  push('}');
   return lines.join('\n');
 };
 
@@ -851,6 +630,7 @@ const renderOperationDocumentationComment = (
   remarks: string | undefined,
   fallback: string,
   argumentDescription: string | undefined,
+  optionsDescription: string,
   returnDescription: string
 ) => {
   const normalizedSummary = summary?.trim();
@@ -882,12 +662,7 @@ const renderOperationDocumentationComment = (
   if (argumentDescription != null) {
     appendTaggedDocumentationLines(lines, 'param', 'args', argumentDescription);
   }
-  appendTaggedDocumentationLines(
-    lines,
-    'param',
-    'signal',
-    'Abort signal used to cancel the request.'
-  );
+  appendTaggedDocumentationLines(lines, 'param', 'options', optionsDescription);
   appendTaggedDocumentationLines(lines, 'returns', '', returnDescription);
   lines.push(' */');
 

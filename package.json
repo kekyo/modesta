@@ -33,7 +33,7 @@
       "require": "./dist/index.cjs"
     },
     "./vite": {
-      "types": "./dist/src/vite.d.ts",
+      "types": "./dist/src/vite/index.d.ts",
       "import": "./dist/vite.mjs",
       "require": "./dist/vite.cjs"
     }

@@ -33,7 +33,7 @@ export default defineConfig({
         ),
         vite: resolve(
           fileURLToPath(new URL('.', import.meta.url)),
-          'src/vite.ts'
+          'src/vite/index.ts'
         ),
         cli: resolve(
           fileURLToPath(new URL('.', import.meta.url)),

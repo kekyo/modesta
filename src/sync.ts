@@ -5,9 +5,10 @@
 
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { dirname, relative } from 'path';
+
 import { generateAccessorSourceFromFile } from './generator';
-import type { Logger } from './logger';
-import type { ResolvedModestaPluginOptions } from './vite';
+import { ResolvedModestaPluginOptions } from './internal';
+import { Logger } from './logger';
 
 //////////////////////////////////////////////////////////////////////////
 

@@ -3,6 +3,8 @@
 // Under MIT.
 // https://github.com/kekyo/modesta/
 
+//////////////////////////////////////////////////////////////////////////
+
 /**
  * Generic JSON object shape used for parsed OpenAPI documents and schemas.
  */

@@ -8,17 +8,19 @@ import { mkdir, writeFile } from 'fs/promises';
 import { dirname, resolve } from 'path';
 import { parseArgs } from 'util';
 import {
-  flattenVitePluginOptions,
-  getModestaPluginOptions,
-  resolveModestaPluginOptions,
-} from './vite';
-import {
   generateAccessorSource,
   generateAccessorSourceFromFile,
 } from './generator';
 import { createConsoleLogger } from './logger';
-import { syncModestaOutput } from './sync';
+import {
+  flattenVitePluginOptions,
+  getModestaPluginOptions,
+  resolveModestaPluginOptions,
+} from './vite-util';
 import { git_commit_hash, version } from './generated/packageMetadata';
+import { syncModestaOutput } from './sync';
+
+//////////////////////////////////////////////////////////////////////////
 
 const usage = [
   `modesta [${version}-${git_commit_hash}]`,
@@ -40,6 +42,8 @@ const usage = [
 ].join('\n');
 
 const httpUrlPattern = /^https?:\/\//iu;
+
+//////////////////////////////////////////////////////////////////////////
 
 const readTextFromStdin = async () => {
   process.stdin.setEncoding('utf8');
@@ -95,6 +99,8 @@ const syncFromViteConfig = async () => {
   );
   await syncModestaOutput(resolvedOptions, logger);
 };
+
+//////////////////////////////////////////////////////////////////////////
 
 const main = async () => {
   const logger = createConsoleLogger('modesta');

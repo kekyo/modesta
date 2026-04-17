@@ -186,6 +186,7 @@ export const buildAccessorGroups = (
       argumentsTypeName,
       description: draft.rawOperation.description,
       descriptorOperationName: `${groupName}.${draft.memberName}`,
+      deprecated: draft.rawOperation.deprecated,
       groupName,
       headerParameters: draft.rawOperation.headerParameters,
       headerParametersTypeName: undefined,

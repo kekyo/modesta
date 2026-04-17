@@ -142,8 +142,6 @@ const user = await userApi.get({ id: '42' });
 console.log(user.name);
 ```
 
-When consuming generated code, enabling TypeScript's `exactOptionalPropertyTypes` is recommended. This allows stricter checking of whether context values are present.
-
 ### Main Features
 
 - Reads Swagger/OpenAPI JSON and YAML and generates TypeScript source code
@@ -162,13 +160,19 @@ Add it to your `devDependencies`:
 npm install -D modesta
 ```
 
+Or, you can install CLI command `modesta` globally:
+
+```bash
+npm install -g modesta
+```
+
 Or, you can use CLI directly with `npx` (see next section.)
 
 ## Usage
 
 ### CLI
 
-If you use it as a CLI, for example:
+If you use it as a CLI, for example (with `npx`):
 
 ```bash
 npx modesta

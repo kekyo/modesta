@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import { describe, expect, it, vi } from 'vitest';
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Logger as ViteLogger } from 'vite';
-import modesta from '../src/vite';
+import modesta from '../src/vite/index';
 import { runCommandAllowFailure, saveArtifactText } from './support/harness';
 import { createSelfSignedHttpsServer } from './support/https-fixture';
 
@@ -145,6 +145,20 @@ describe('Vite plugin and sync CLI', () => {
 
     expect(typeof vitePluginModule.default).toBe('function');
     expect('modesta' in vitePluginModule).toBe(false);
+  });
+
+  it('publishes an existing declaration file for the ./vite package export', async () => {
+    const packageJson = JSON.parse(
+      await readFile(resolve(process.cwd(), 'package.json'), 'utf8')
+    ) as {
+      exports?: Record<string, { types?: string | undefined } | undefined>;
+    };
+    const viteExportTypesPath = packageJson.exports?.['./vite']?.types;
+
+    expect(viteExportTypesPath).toBe('./dist/src/vite/index.d.ts');
+    await expect(
+      stat(resolve(process.cwd(), viteExportTypesPath ?? ''))
+    ).resolves.toBeDefined();
   });
 
   it('updates generated output for local Swagger input changes and ignores output self-triggers', async () => {

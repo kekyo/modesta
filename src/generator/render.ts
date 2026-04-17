@@ -18,6 +18,7 @@ import {
 import {
   isSchemaObjectLike,
   resolveReferenceObject,
+  resolveSchemaDeprecated,
   resolveSchemaObject,
 } from './resolve';
 import {
@@ -167,6 +168,7 @@ const renderOperationDefinition = (
         renderTypeExpression(context, parameter.schema, 1),
         parameter.required === false,
         parameter.description,
+        parameter.deprecated ? 'This argument is deprecated.' : undefined,
         true,
         parameter.duplicatedPropertyName != null
           ? `Duplicated argument name: '${parameter.duplicatedPropertyName}'`
@@ -216,7 +218,10 @@ const renderRequestBodyEnvelopeDefinition = (
         'body',
         getOperationRequestBodyTypeExpression(context, requestBody),
         requestBody.required === false,
-        requestBody.parameterDescription
+        requestBody.parameterDescription,
+        resolveSchemaDeprecated(context.document, requestBody.schema)
+          ? 'This request body is deprecated.'
+          : undefined
       ),
     ]
   );
@@ -277,6 +282,7 @@ const renderResponseHeadersDefinition = (
         renderTypeExpression(context, header.schema, 1),
         header.required === false,
         header.description,
+        header.deprecated ? 'This response header is deprecated.' : undefined,
         true,
         header.duplicatedPropertyName != null
           ? `Duplicated response field name: '${header.duplicatedPropertyName}'`
@@ -303,7 +309,12 @@ const renderResponseBodyEnvelopeDefinition = (
         'body',
         getOperationResponseBodyValueTypeExpression(context, response),
         false,
-        getResponseDocumentationDescription(response)
+        getResponseDocumentationDescription(response),
+        response.schema != null
+          ? resolveSchemaDeprecated(context.document, response.schema)
+            ? 'This response body is deprecated.'
+            : undefined
+          : undefined
       ),
     ]
   );
@@ -350,6 +361,7 @@ const renderAccessorInterface = (
       renderOperationDocumentationComment(
         operation.summary,
         operation.description,
+        operation.deprecated ? 'This operation is deprecated.' : undefined,
         `${operation.method} ${operation.path}`,
         argumentDescription,
         withContext
@@ -389,6 +401,60 @@ const renderAccessorInterfaces = (
     renderAccessorInterface(context, accessorGroup, true),
   ].join('\n\n');
 
+const getOperationResponseHeadersConstName = (
+  accessorGroup: AccessorGroupDefinition,
+  operation: OperationDefinition
+) =>
+  `modestaResponseHeaders_${accessorGroup.interfaceName}_${operation.memberName}`;
+
+const getOperationExcludedPropertiesConstName = (
+  accessorGroup: AccessorGroupDefinition,
+  operation: OperationDefinition
+) =>
+  `modestaExcludedProperties_${accessorGroup.interfaceName}_${operation.memberName}`;
+
+const renderAccessorFactoryConstants = (
+  context: OpenApiContext,
+  accessorGroup: AccessorGroupDefinition
+) => {
+  const definitions: string[] = [];
+
+  for (const operation of accessorGroup.operations) {
+    if (operation.response.headers.length > 0) {
+      definitions.push(
+        `const ${getOperationResponseHeadersConstName(accessorGroup, operation)}: readonly AccessorResponseHeaderDescriptor[] = ${renderResponseHeaderDescriptorArray(
+          context,
+          operation.response.headers
+        )};`
+      );
+    }
+
+    if (
+      operation.requestBody != null &&
+      shouldUseRequestBodyEnvelope(context, operation) === false
+    ) {
+      const parameterPropertyNames = getOperationParameters(operation).map(
+        (parameter) => parameter.propertyName
+      );
+      if (parameterPropertyNames.length > 0) {
+        definitions.push(
+          `const ${getOperationExcludedPropertiesConstName(accessorGroup, operation)} = ${renderLiteral(parameterPropertyNames)};`
+        );
+      }
+    }
+  }
+
+  return definitions.join('\n');
+};
+
+const renderOperationResponseHeadersExpression = (
+  accessorGroup: AccessorGroupDefinition,
+  operation: OperationDefinition
+) =>
+  operation.response.headers.length === 0
+    ? 'modestaEmptyResponseHeaders'
+    : getOperationResponseHeadersConstName(accessorGroup, operation);
+
 const renderAccessorFactory = (
   context: OpenApiContext,
   accessorGroup: AccessorGroupDefinition
@@ -400,6 +466,15 @@ const renderAccessorFactory = (
   const accessorWithContextInterfaceName = getAccessorWithContextInterfaceName(
     accessorGroup.interfaceName
   );
+  const renderedConstants = renderAccessorFactoryConstants(
+    context,
+    accessorGroup
+  );
+
+  if (renderedConstants.length > 0) {
+    push(renderedConstants);
+    push();
+  }
 
   push(
     renderTaggedDocumentationComment(
@@ -513,13 +588,14 @@ const renderAccessorFactory = (
       `      body: ${renderRequestBodyArgumentExpression(
         context,
         operation,
+        accessorGroup,
         argumentMode === 'optional'
       )},`
     );
     push(
-      `      responseHeaders: ${renderResponseHeaderDescriptorArray(
-        context,
-        operation.response.headers
+      `      responseHeaders: ${renderOperationResponseHeadersExpression(
+        accessorGroup,
+        operation
       )},`
     );
     push(
@@ -544,10 +620,14 @@ const renderNamedTypeDefinition = (
   schema: JsonRecord,
   description: string | undefined
 ) => {
+  const deprecated = resolveSchemaDeprecated(context.document, schema);
   const referenceTypeExpression = getReferenceTypeExpression(context, schema);
   if (referenceTypeExpression != null) {
     return [
-      renderDocumentationComment(description),
+      renderDocumentationComment(
+        description,
+        deprecated ? 'This schema is deprecated.' : undefined
+      ),
       `export type ${typeName} = ${referenceTypeExpression};`,
     ].join('\n');
   }
@@ -562,7 +642,8 @@ const renderNamedTypeDefinition = (
         property.propertyName,
         renderTypeExpression(context, property.schema, 1),
         property.required === false,
-        property.description
+        property.description,
+        property.deprecated ? 'This property is deprecated.' : undefined
       )
     );
     if (flattened.additionalPropertiesType != null) {
@@ -570,11 +651,20 @@ const renderNamedTypeDefinition = (
         `  readonly [key: string]: ${flattened.additionalPropertiesType};`
       );
     }
-    return renderInterfaceDefinition(typeName, description, members);
+    return renderInterfaceDefinition(
+      typeName,
+      description,
+      members,
+      undefined,
+      deprecated ? 'This schema is deprecated.' : undefined
+    );
   }
 
   return [
-    renderDocumentationComment(description),
+    renderDocumentationComment(
+      description,
+      deprecated ? 'This schema is deprecated.' : undefined
+    ),
     `export type ${typeName} = ${renderTypeExpression(context, schema, 0)};`,
   ].join('\n');
 };
@@ -585,13 +675,17 @@ const renderInterfaceDefinition = (
   members: string[],
   typeParams:
     | { description: string | undefined; name: string }[]
-    | undefined = undefined
+    | undefined = undefined,
+  deprecated: string | undefined = undefined
 ) => {
   const lines: string[] = [];
   lines.push(
     typeParams != null
-      ? renderTaggedDocumentationComment(description, { typeParams })
-      : renderDocumentationComment(description)
+      ? renderTaggedDocumentationComment(description, {
+          deprecated,
+          typeParams,
+        })
+      : renderDocumentationComment(description, deprecated)
   );
   lines.push(`export interface ${name} {`);
   if (members.length === 0) {
@@ -611,13 +705,17 @@ const renderInterfaceMember = (
   type: string,
   optional: boolean,
   description: string | undefined,
+  deprecated: string | undefined = undefined,
   readonly = true,
   remarks: string | undefined = undefined
 ) => {
   const lines: string[] = [];
-  if (description != null || remarks != null) {
+  if (description != null || remarks != null || deprecated) {
     lines.push(
-      indent(renderDocumentationCommentWithRemarks(description, remarks), 1)
+      indent(
+        renderDocumentationCommentWithRemarks(description, remarks, deprecated),
+        1
+      )
     );
   }
   lines.push(
@@ -626,20 +724,28 @@ const renderInterfaceMember = (
   return lines.join('\n');
 };
 
-const renderDocumentationComment = (description: string | undefined) => {
+const renderDocumentationComment = (
+  description: string | undefined,
+  deprecated: string | undefined = undefined
+) => {
   const lines = normalizeDocumentationLines(
     description,
     'Generated definition.'
   );
-  if (lines.length === 0) {
+  if (lines.length === 0 && deprecated == null) {
     return '/** Generated definition. */';
   }
 
-  if (lines.length === 1) {
+  if (lines.length === 1 && deprecated == null) {
     return `/** ${lines[0]} */`;
   }
 
-  return ['/**', ...lines.map((line) => ` * ${line}`), ' */'].join('\n');
+  const commentLines = ['/**', ...lines.map((line) => ` * ${line}`)];
+  if (deprecated != null) {
+    appendTaggedDocumentationLines(commentLines, 'deprecated', '', deprecated);
+  }
+  commentLines.push(' */');
+  return commentLines.join('\n');
 };
 
 const normalizeDocumentationLines = (
@@ -653,10 +759,15 @@ const normalizeDocumentationLines = (
 
 const appendTaggedDocumentationLines = (
   lines: string[],
-  tagName: 'param' | 'remarks' | 'returns' | 'typeParam',
+  tagName: 'deprecated' | 'param' | 'remarks' | 'returns' | 'typeParam',
   tagValue: string,
   description: string | undefined
 ) => {
+  if (tagName === 'deprecated' && description == null) {
+    lines.push(' * @deprecated');
+    return;
+  }
+
   const normalizedLines = normalizeDocumentationLines(description, tagValue);
   if (normalizedLines.length === 0) {
     return;
@@ -673,6 +784,7 @@ const appendTaggedDocumentationLines = (
 const renderTaggedDocumentationComment = (
   description: string | undefined,
   options: {
+    deprecated?: string | undefined;
     params?: { description: string | undefined; name: string }[] | undefined;
     remarks?: string | undefined;
     returns?: string | undefined;
@@ -687,6 +799,9 @@ const renderTaggedDocumentationComment = (
       (line) => ` * ${line}`
     )
   );
+  if (options.deprecated != null) {
+    appendTaggedDocumentationLines(lines, 'deprecated', '', options.deprecated);
+  }
 
   for (const typeParam of options.typeParams ?? []) {
     appendTaggedDocumentationLines(
@@ -767,6 +882,7 @@ const renderResponseHeaderDescriptorArray = (
 const renderOperationDocumentationComment = (
   summary: string | undefined,
   remarks: string | undefined,
+  deprecated: string | undefined,
   fallback: string,
   argumentDescription: string | undefined,
   optionsDescription: string,
@@ -786,6 +902,9 @@ const renderOperationDocumentationComment = (
   }
 
   const lines = ['/**', ...descriptionLines.map((line) => ` * ${line}`)];
+  if (deprecated != null) {
+    appendTaggedDocumentationLines(lines, 'deprecated', '', deprecated);
+  }
   const hasDistinctRemarks =
     normalizedSummary != null &&
     normalizedSummary.length > 0 &&
@@ -810,10 +929,11 @@ const renderOperationDocumentationComment = (
 
 const renderDocumentationCommentWithRemarks = (
   description: string | undefined,
-  remarks: string | undefined
+  remarks: string | undefined,
+  deprecated: string | undefined = undefined
 ) => {
   if (remarks == null) {
-    return renderDocumentationComment(description);
+    return renderDocumentationComment(description, deprecated);
   }
 
   const lines = ['/**'];
@@ -823,6 +943,9 @@ const renderDocumentationCommentWithRemarks = (
         (line) => ` * ${line}`
       )
     );
+  }
+  if (deprecated != null) {
+    appendTaggedDocumentationLines(lines, 'deprecated', '', deprecated);
   }
   appendTaggedDocumentationLines(lines, 'remarks', '', remarks);
   lines.push(' */');
@@ -1210,7 +1333,15 @@ const renderInlineObjectType = (
   const members: string[] = [];
   for (const property of flattened.properties) {
     if (property.description != null) {
-      members.push(indent(renderDocumentationComment(property.description), 1));
+      members.push(
+        indent(
+          renderDocumentationComment(
+            property.description,
+            property.deprecated ? 'This property is deprecated.' : undefined
+          ),
+          1
+        )
+      );
     }
     members.push(
       `  ${renderPropertyName(property.propertyName)}${property.required ? '' : '?'}: ${property.typeExpression};`
@@ -1229,6 +1360,7 @@ const renderInlineObjectType = (
 
 interface FlattenedProperty {
   description: string | undefined;
+  deprecated: boolean;
   propertyName: string;
   required: boolean;
   schema: JsonRecord;
@@ -1259,6 +1391,7 @@ const tryFlattenObjectSchema = (
       .sort((left, right) => left.name.localeCompare(right.name))
       .map((property) => ({
         description: property.description,
+        deprecated: property.deprecated,
         propertyName: property.name,
         required: property.required,
         schema: property.schema,
@@ -1269,6 +1402,7 @@ const tryFlattenObjectSchema = (
 
 interface ExpandedProperty {
   description: string | undefined;
+  deprecated: boolean;
   name: string;
   required: boolean;
   schema: JsonRecord;
@@ -1378,6 +1512,10 @@ const expandDirectObjectShape = (
       description:
         getString(propertySchema, 'description') ??
         getString(resolvedPropertySchema, 'description'),
+      deprecated:
+        getBoolean(propertySchema, 'deprecated') ??
+        getBoolean(resolvedPropertySchema, 'deprecated') ??
+        false,
       name: propertyName,
       required: requiredNames.has(propertyName),
       schema: propertySchema,
@@ -1428,6 +1566,7 @@ const hasUnsupportedComposition = (schema: JsonRecord) => {
 const renderRequestBodyArgumentExpression = (
   context: OpenApiContext,
   operation: OperationDefinition,
+  accessorGroup: AccessorGroupDefinition,
   optionalArguments: boolean
 ) => {
   if (operation.requestBody == null) {
@@ -1445,7 +1584,10 @@ const renderRequestBodyArgumentExpression = (
     return 'args';
   }
 
-  return `modestaExcludeProperties(args, ${renderLiteral(parameterPropertyNames)})`;
+  return `modestaExcludeProperties(args, ${getOperationExcludedPropertiesConstName(
+    accessorGroup,
+    operation
+  )})`;
 };
 
 const getResponseHeaderValueDescriptor = (

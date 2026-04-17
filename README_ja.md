@@ -162,11 +162,19 @@ console.log(user.name);
 npm install -D modesta
 ```
 
+または、グローバルな `modesta` コマンドとしてインストールします:
+
+```bash
+npm install -g modesta
+```
+
+または、 `npx` を使用して直接実行できます（後述）。
+
 ## 使用方法
 
 ### CLI
 
-CLIは次のように実行します:
+CLIは次のように実行します（`npx`を使用する例）:
 
 ```bash
 npx modesta
@@ -412,7 +420,7 @@ export function create_users_accessor<TAccessorInterfaceContext, TAccessorContex
 }
 ```
 
-## 型変換
+### 型変換
 
 OpenAPI スキーマは、おおむね次のように TypeScript へ変換されます:
 
@@ -432,10 +440,11 @@ OpenAPI スキーマは、おおむね次のように TypeScript へ変換され
 // Do not edit manually
 ```
 
-## コメントの反映
+### コメントの反映
 
 - OpenAPI の `summary` と `description` は、アクセサメソッドの JSDoc に反映されます
 - スキーマやプロパティの `description` も、生成される型定義へ反映されます
+- OpenAPI の `deprecated: true` は、生成される JSDoc の `@deprecated` に反映されます
 - つまり、Swagger 側にコメントや注釈が反映されていれば、その情報をそのまま利用できます
 
 ---

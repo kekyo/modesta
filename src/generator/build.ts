@@ -4,7 +4,7 @@
 // https://github.com/kekyo/modesta/
 
 import { GenerateAccessorWarningSink, JsonRecord } from '../types';
-import { asArray, asRecord, getRecord, getString } from '../util';
+import { asArray, asRecord, getBoolean, getRecord, getString } from '../util';
 import {
   ApiDefinition,
   OpenApiContext,
@@ -48,6 +48,11 @@ export const buildApiDefinition = (
           asRecord(context.componentSchemas[rawName]),
           'description'
         ),
+        deprecated:
+          getBoolean(
+            asRecord(context.componentSchemas[rawName]),
+            'deprecated'
+          ) ?? false,
         rawName,
         typeName,
       }) satisfies SchemaDefinition
@@ -104,6 +109,7 @@ const collectRawOperations = (
 
       operations.push({
         description: getString(rawOperation, 'description'),
+        deprecated: getBoolean(rawOperation, 'deprecated') ?? false,
         headerParameters: mergedParameters.filter(
           (parameter) => parameter.location === 'header'
         ),

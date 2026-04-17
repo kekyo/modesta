@@ -148,6 +148,10 @@ const operationEdgeCaseProject: SwaggerFixtureProject = {
       'app.MapGet("/number-message", () => TypedResults.Ok(new[] { 1, 2, 3 }))',
       '    .WithName("GetNumberMessage");',
       '',
+      'app.MapGet("/rate-limits", () => Results.Empty)',
+      '    .Produces(StatusCodes.Status200OK)',
+      '    .WithName("GetRateLimits");',
+      '',
       'app.MapGet("/response-collision", () =>',
       '    TypedResults.Ok(new ResponseCollisionBody("body-tag")))',
       '    .WithName("GetResponseCollision");',
@@ -194,6 +198,9 @@ const operationEdgeCaseProject: SwaggerFixtureProject = {
       '            case "GetNumberMessage":',
       '                AddStringHeader(response, "etag", "Entity tag.");',
       '                break;',
+      '            case "GetRateLimits":',
+      '                AddNumberArrayHeader(response, "x-rate-limit-history", "Recent remaining quota values.");',
+      '                break;',
       '            case "GetResponseCollision":',
       '                AddStringHeader(response, "etag", "Entity tag.");',
       '                AddStringHeader(response, "x-api-key", "Primary collision key.");',
@@ -211,6 +218,23 @@ const operationEdgeCaseProject: SwaggerFixtureProject = {
       '            Schema = new OpenApiSchema',
       '            {',
       '                Type = "string",',
+      '            },',
+      '        };',
+      '    }',
+      '',
+      '    private static void AddNumberArrayHeader(OpenApiResponse response, string name, string description)',
+      '    {',
+      '        response.Headers ??= new Dictionary<string, OpenApiHeader>();',
+      '        response.Headers[name] = new OpenApiHeader',
+      '        {',
+      '            Description = description,',
+      '            Schema = new OpenApiSchema',
+      '            {',
+      '                Type = "array",',
+      '                Items = new OpenApiSchema',
+      '                {',
+      '                    Type = "integer",',
+      '                },',
       '            },',
       '        };',
       '    }',
@@ -658,6 +682,10 @@ describe('operation definition generation', () => {
 
   it('provides a fetch-based sender helper', async () => {
     const signal = new AbortController().signal;
+    const json = vi.fn(async () => ({ id: '42', source: 'route' }));
+    const text = vi.fn(async () =>
+      JSON.stringify({ id: '42', source: 'route' })
+    );
     const fetchImplementation = vi.fn(
       async (input: URL, init?: RequestInit) => {
         expect(String(input)).toBe('https://api.example.com/route/42');
@@ -668,7 +696,6 @@ describe('operation definition generation', () => {
             authorization: 'Bearer token',
             accept: 'application/json',
           },
-          body: undefined,
           signal,
         });
 
@@ -680,7 +707,8 @@ describe('operation definition generation', () => {
             get: (name: string) =>
               name === 'content-type' ? 'application/json' : null,
           },
-          text: async () => JSON.stringify({ id: '42', source: 'route' }),
+          json,
+          text,
         };
       }
     );
@@ -708,6 +736,19 @@ describe('operation definition generation', () => {
       source: 'route',
     });
     expect(fetchImplementation).toHaveBeenCalledTimes(1);
+    expect(json).toHaveBeenCalledTimes(1);
+    expect(text).not.toHaveBeenCalled();
+  });
+
+  it('emits runtime helpers that short-circuit empty response header projections', () => {
+    expect(generatedSource).toContain('if (descriptors.length === 0) {');
+    expect(generatedSource).toContain(
+      'let projectedHeaders: Record<string, unknown> | undefined;'
+    );
+    expect(generatedSource).toContain('if (projectedHeaders == null) {');
+    expect(generatedSource).not.toContain(
+      'Object.keys(projectedHeaders).length'
+    );
   });
 
   it('returns undefined from the fetch-based sender helper for empty responses', async () => {
@@ -731,6 +772,40 @@ describe('operation definition generation', () => {
     });
 
     expect(result).toBeUndefined();
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits empty fetch init fields when no defaults or request headers are present', async () => {
+    const fetchImplementation = vi.fn(
+      async (input: URL, init?: RequestInit) => {
+        expect(String(input)).toBe('https://api.example.com/items/42');
+        expect(init).toEqual({
+          method: 'DELETE',
+        });
+
+        return {
+          ok: true,
+          status: 204,
+          statusText: 'No Content',
+          headers: {
+            get: () => null,
+          },
+          text: async () => '',
+        };
+      }
+    );
+    const sender = generatedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: fetchImplementation,
+    });
+    const accessor = generatedModule.create_DeleteItem_accessor(sender);
+
+    await expect(
+      accessor._delete({
+        id: '42',
+      })
+    ).resolves.toBeUndefined();
+
     expect(fetchImplementation).toHaveBeenCalledTimes(1);
   });
 
@@ -943,6 +1018,15 @@ describe('operation definition generation', () => {
     );
   });
 
+  it('hoists excluded request body property names into generated constants', async () => {
+    expect(edgeCaseGeneratedSource).toContain(
+      'const modestaExcludedProperties_CreateItem_post = ["path_id","query_xApiKey","header_xApiKey"];'
+    );
+    expect(edgeCaseGeneratedSource).toContain(
+      'body: modestaExcludeProperties(args, modestaExcludedProperties_CreateItem_post),'
+    );
+  });
+
   it('uses primitive request bodies directly when no flattened parameters are present', async () => {
     expect(edgeCaseGeneratedSource).toContain(
       'readonly post: (args: string, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
@@ -1100,6 +1184,19 @@ describe('operation definition generation', () => {
   });
 
   it('returns projected response headers when the response body is absent', async () => {
+    expect(edgeCaseGeneratedSource).toContain(
+      'const modestaEmptyResponseHeaders: readonly AccessorResponseHeaderDescriptor[] = [];'
+    );
+    expect(edgeCaseGeneratedSource).toContain(
+      'responseHeaders: modestaEmptyResponseHeaders,'
+    );
+    expect(edgeCaseGeneratedSource).toContain(
+      'const modestaResponseHeaders_GetToken_get: readonly AccessorResponseHeaderDescriptor[] = ['
+    );
+    expect(edgeCaseGeneratedSource).toContain(
+      'responseHeaders: modestaResponseHeaders_GetToken_get,'
+    );
+
     const responseHeadersBlock = getInterfaceBlock(
       edgeCaseGeneratedSource,
       'GetToken_get_response_headers'
@@ -1126,6 +1223,35 @@ describe('operation definition generation', () => {
     await expect(accessor.get()).resolves.toEqual({
       xRequestId: 'req-42',
     });
+  });
+
+  it('preserves URL encoding for path and query parameters in generated sender descriptors', async () => {
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor =
+      edgeCaseGeneratedModule.create_GetNormalizedDistinct_accessor(sender);
+
+    await accessor.get({
+      tenantId: 'tenant#1',
+      userId: 'query &+?=',
+      user_id: 'route/42 alpha?',
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'GetNormalizedDistinct.get',
+        method: 'GET',
+        url: '/normalized-distinct/route%2F42%20alpha%3F?user-id=query+%26%2B%3F%3D',
+        headers: {
+          'tenant.id': 'tenant#1',
+          accept: 'application/json',
+        },
+        body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
+      },
+      undefined,
+      undefined
+    );
   });
 
   it('returns primitive response bodies directly when response headers are absent', async () => {
@@ -1178,7 +1304,7 @@ describe('operation definition generation', () => {
           get: (name: string) =>
             name === 'content-type' ? 'application/json' : null,
         },
-        text: async () => JSON.stringify([1, 2, 3]),
+        json: async () => [1, 2, 3],
       })),
     });
     const accessor = edgeCaseGeneratedModule.create_GetNumbers_accessor(sender);
@@ -1191,6 +1317,7 @@ describe('operation definition generation', () => {
       'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentResponse & GetDocument_get_response_headers>;'
     );
 
+    const responseBody = { value: 'alpha' };
     const sender = edgeCaseGeneratedModule.createFetchSender({
       baseUrl: 'https://api.example.com',
       fetch: vi.fn(async () => ({
@@ -1205,13 +1332,16 @@ describe('operation definition generation', () => {
                 ? 'etag-42'
                 : null,
         },
-        text: async () => JSON.stringify({ value: 'alpha' }),
+        json: async () => responseBody,
       })),
     });
     const accessor =
       edgeCaseGeneratedModule.create_GetDocument_accessor(sender);
 
-    await expect(accessor.get()).resolves.toEqual({
+    const result = await accessor.get();
+
+    expect(result).toBe(responseBody);
+    expect(result).toEqual({
       value: 'alpha',
       etag: 'etag-42',
     });
@@ -1273,7 +1403,7 @@ describe('operation definition generation', () => {
                 ? 'etag-100'
                 : null,
         },
-        text: async () => JSON.stringify([1, 2, 3]),
+        json: async () => [1, 2, 3],
       })),
     });
     const accessor =
@@ -1327,7 +1457,7 @@ describe('operation definition generation', () => {
                     ? 'header-tag-2'
                     : null,
         },
-        text: async () => JSON.stringify({ etag: 'body-tag' }),
+        json: async () => ({ etag: 'body-tag' }),
       })),
     });
     const accessor =
@@ -1338,6 +1468,36 @@ describe('operation definition generation', () => {
       header_etag: 'header-tag',
       header_xApiKey: 'query-tag',
       header_xApiKey_2: 'header-tag-2',
+    });
+  });
+
+  it('parses projected array response headers with trimmed numeric items', async () => {
+    const responseHeadersBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'GetRateLimits_get_response_headers'
+    );
+    expect(responseHeadersBlock).toContain(
+      'xRateLimitHistory?: ReadonlyArray<number>;'
+    );
+
+    const sender = edgeCaseGeneratedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          get: (name: string) =>
+            name === 'x-rate-limit-history' ? '7, 5, 3' : null,
+        },
+        text: async () => '',
+      })),
+    });
+    const accessor =
+      edgeCaseGeneratedModule.create_GetRateLimits_accessor(sender);
+
+    await expect(accessor.get()).resolves.toEqual({
+      xRateLimitHistory: [7, 5, 3],
     });
   });
 

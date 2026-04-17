@@ -672,7 +672,6 @@ describe('operation definition generation', () => {
             authorization: 'Bearer token',
             accept: 'application/json',
           },
-          body: undefined,
           signal,
         });
 
@@ -717,6 +716,17 @@ describe('operation definition generation', () => {
     expect(text).not.toHaveBeenCalled();
   });
 
+  it('emits runtime helpers that short-circuit empty response header projections', () => {
+    expect(generatedSource).toContain('if (descriptors.length === 0) {');
+    expect(generatedSource).toContain(
+      'let projectedHeaders: Record<string, unknown> | undefined;'
+    );
+    expect(generatedSource).toContain('if (projectedHeaders == null) {');
+    expect(generatedSource).not.toContain(
+      'Object.keys(projectedHeaders).length'
+    );
+  });
+
   it('returns undefined from the fetch-based sender helper for empty responses', async () => {
     const fetchImplementation = vi.fn(async () => ({
       ok: true,
@@ -738,6 +748,40 @@ describe('operation definition generation', () => {
     });
 
     expect(result).toBeUndefined();
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits empty fetch init fields when no defaults or request headers are present', async () => {
+    const fetchImplementation = vi.fn(
+      async (input: URL, init?: RequestInit) => {
+        expect(String(input)).toBe('https://api.example.com/items/42');
+        expect(init).toEqual({
+          method: 'DELETE',
+        });
+
+        return {
+          ok: true,
+          status: 204,
+          statusText: 'No Content',
+          headers: {
+            get: () => null,
+          },
+          text: async () => '',
+        };
+      }
+    );
+    const sender = generatedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: fetchImplementation,
+    });
+    const accessor = generatedModule.create_DeleteItem_accessor(sender);
+
+    await expect(
+      accessor._delete({
+        id: '42',
+      })
+    ).resolves.toBeUndefined();
+
     expect(fetchImplementation).toHaveBeenCalledTimes(1);
   });
 

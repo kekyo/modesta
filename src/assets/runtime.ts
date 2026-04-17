@@ -193,6 +193,15 @@ const modestaHasPropertyName = (
   return false;
 };
 
+const modestaHasOwnProperties = (value: object) => {
+  for (const key in value) {
+    if (Object.hasOwn(value, key)) {
+      return true;
+    }
+  }
+  return false;
+};
+
 const modestaExcludeProperties = (
   value: unknown,
   propertyNames: readonly string[]
@@ -269,12 +278,17 @@ const modestaReadResponseHeaders = (
   response: Response,
   descriptors: readonly AccessorResponseHeaderDescriptor[]
 ) => {
-  const projectedHeaders: Record<string, unknown> = {};
+  if (descriptors.length === 0) {
+    return undefined;
+  }
+
+  let projectedHeaders: Record<string, unknown> | undefined;
   for (const descriptor of descriptors) {
     const headerValue = response.headers.get(descriptor.name);
     if (headerValue == null) {
       continue;
     }
+    projectedHeaders ??= {};
     projectedHeaders[descriptor.propertyName] = modestaParseResponseHeaderValue(
       headerValue,
       descriptor
@@ -285,16 +299,14 @@ const modestaReadResponseHeaders = (
 
 const modestaProjectResponse = (
   body: unknown,
-  projectedHeaders: Record<string, unknown>,
+  projectedHeaders: Record<string, unknown> | undefined,
   wrapResponseBody: boolean
 ) => {
-  if (body == null) {
-    return Object.keys(projectedHeaders).length === 0
-      ? undefined
-      : projectedHeaders;
+  if (projectedHeaders == null) {
+    return body == null ? undefined : body;
   }
-  if (Object.keys(projectedHeaders).length === 0) {
-    return body;
+  if (body == null) {
+    return projectedHeaders;
   }
   if (wrapResponseBody) {
     return {
@@ -340,6 +352,8 @@ const modestaReadResponseBody = (response: Response) => {
  */
 export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSenderWithoutContext<undefined> => {
   const fetchImplementation = options.fetch ?? globalThis.fetch;
+  const hasDefaultHeaders =
+    options.headers != null && modestaHasOwnProperties(options.headers);
   if (typeof fetchImplementation !== 'function') {
     throw new Error(
       'Fetch implementation is not available. Pass CreateFetchSenderOptions.fetch explicitly.'
@@ -351,18 +365,44 @@ export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSe
     _interfaceContext: undefined,
     accessorOptions: AccessorOptionsWithoutContext | undefined
   ) => {
+    const requestHeaders =
+      modestaHasOwnProperties(request.headers) ? request.headers : undefined;
+    const headers =
+      hasDefaultHeaders === false
+        ? requestHeaders
+        : requestHeaders == null
+          ? options.headers
+          : {
+              ...options.headers,
+              ...requestHeaders,
+            };
+    const body = modestaSerializeFetchBody(
+      request.body,
+      request.headers['content-type']
+    );
+    const requestInit: RequestInit =
+      options.init == null
+        ? {
+            method: request.method,
+          }
+        : {
+            ...options.init,
+            method: request.method,
+          };
+
+    if (headers != null) {
+      requestInit.headers = headers;
+    }
+    if (body !== undefined) {
+      requestInit.body = body;
+    }
+    if (accessorOptions?.signal != null) {
+      requestInit.signal = accessorOptions.signal;
+    }
+
     const response = await fetchImplementation(
       new URL(request.url, options.baseUrl),
-      {
-        ...(options.init ?? {}),
-        method: request.method,
-        headers: {
-          ...(options.headers ?? {}),
-          ...request.headers,
-        },
-        body: modestaSerializeFetchBody(request.body, request.headers['content-type']),
-        signal: accessorOptions?.signal,
-      }
+      requestInit
     );
 
     if (response.ok === false) {

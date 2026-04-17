@@ -148,6 +148,10 @@ const operationEdgeCaseProject: SwaggerFixtureProject = {
       'app.MapGet("/number-message", () => TypedResults.Ok(new[] { 1, 2, 3 }))',
       '    .WithName("GetNumberMessage");',
       '',
+      'app.MapGet("/rate-limits", () => Results.Empty)',
+      '    .Produces(StatusCodes.Status200OK)',
+      '    .WithName("GetRateLimits");',
+      '',
       'app.MapGet("/response-collision", () =>',
       '    TypedResults.Ok(new ResponseCollisionBody("body-tag")))',
       '    .WithName("GetResponseCollision");',
@@ -194,6 +198,9 @@ const operationEdgeCaseProject: SwaggerFixtureProject = {
       '            case "GetNumberMessage":',
       '                AddStringHeader(response, "etag", "Entity tag.");',
       '                break;',
+      '            case "GetRateLimits":',
+      '                AddNumberArrayHeader(response, "x-rate-limit-history", "Recent remaining quota values.");',
+      '                break;',
       '            case "GetResponseCollision":',
       '                AddStringHeader(response, "etag", "Entity tag.");',
       '                AddStringHeader(response, "x-api-key", "Primary collision key.");',
@@ -211,6 +218,23 @@ const operationEdgeCaseProject: SwaggerFixtureProject = {
       '            Schema = new OpenApiSchema',
       '            {',
       '                Type = "string",',
+      '            },',
+      '        };',
+      '    }',
+      '',
+      '    private static void AddNumberArrayHeader(OpenApiResponse response, string name, string description)',
+      '    {',
+      '        response.Headers ??= new Dictionary<string, OpenApiHeader>();',
+      '        response.Headers[name] = new OpenApiHeader',
+      '        {',
+      '            Description = description,',
+      '            Schema = new OpenApiSchema',
+      '            {',
+      '                Type = "array",',
+      '                Items = new OpenApiSchema',
+      '                {',
+      '                    Type = "integer",',
+      '                },',
       '            },',
       '        };',
       '    }',
@@ -1293,6 +1317,7 @@ describe('operation definition generation', () => {
       'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentResponse & GetDocument_get_response_headers>;'
     );
 
+    const responseBody = { value: 'alpha' };
     const sender = edgeCaseGeneratedModule.createFetchSender({
       baseUrl: 'https://api.example.com',
       fetch: vi.fn(async () => ({
@@ -1307,13 +1332,16 @@ describe('operation definition generation', () => {
                 ? 'etag-42'
                 : null,
         },
-        json: async () => ({ value: 'alpha' }),
+        json: async () => responseBody,
       })),
     });
     const accessor =
       edgeCaseGeneratedModule.create_GetDocument_accessor(sender);
 
-    await expect(accessor.get()).resolves.toEqual({
+    const result = await accessor.get();
+
+    expect(result).toBe(responseBody);
+    expect(result).toEqual({
       value: 'alpha',
       etag: 'etag-42',
     });
@@ -1440,6 +1468,36 @@ describe('operation definition generation', () => {
       header_etag: 'header-tag',
       header_xApiKey: 'query-tag',
       header_xApiKey_2: 'header-tag-2',
+    });
+  });
+
+  it('parses projected array response headers with trimmed numeric items', async () => {
+    const responseHeadersBlock = getInterfaceBlock(
+      edgeCaseGeneratedSource,
+      'GetRateLimits_get_response_headers'
+    );
+    expect(responseHeadersBlock).toContain(
+      'xRateLimitHistory?: ReadonlyArray<number>;'
+    );
+
+    const sender = edgeCaseGeneratedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          get: (name: string) =>
+            name === 'x-rate-limit-history' ? '7, 5, 3' : null,
+        },
+        text: async () => '',
+      })),
+    });
+    const accessor =
+      edgeCaseGeneratedModule.create_GetRateLimits_accessor(sender);
+
+    await expect(accessor.get()).resolves.toEqual({
+      xRateLimitHistory: [7, 5, 3],
     });
   });
 

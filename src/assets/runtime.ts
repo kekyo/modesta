@@ -202,6 +202,18 @@ const modestaHasOwnProperties = (value: object) => {
   return false;
 };
 
+const modestaAssignProperties = (
+  target: Record<string, unknown>,
+  source: Record<string, unknown>
+) => {
+  for (const key in source) {
+    if (Object.hasOwn(source, key)) {
+      target[key] = source[key];
+    }
+  }
+  return target;
+};
+
 const modestaExcludeProperties = (
   value: unknown,
   propertyNames: readonly string[]
@@ -256,19 +268,39 @@ const modestaParseResponseHeaderScalar = (
   }
 };
 
+const modestaParseResponseHeaderArrayValue = (
+  value: string,
+  itemValueType: AccessorResponseHeaderDescriptor['itemValueType']
+) => {
+  const values: unknown[] = [];
+  let entryStart = 0;
+
+  for (let index = 0; index <= value.length; index += 1) {
+    if (index !== value.length && value.charCodeAt(index) !== 44) {
+      continue;
+    }
+
+    values.push(
+      modestaParseResponseHeaderScalar(
+        value.slice(entryStart, index).trim(),
+        itemValueType ?? 'unknown'
+      )
+    );
+    entryStart = index + 1;
+  }
+
+  return values;
+};
+
 const modestaParseResponseHeaderValue = (
   value: string,
   descriptor: AccessorResponseHeaderDescriptor
 ) => {
   if (descriptor.valueType === 'array') {
-    return value
-      .split(',')
-      .map((entry) =>
-        modestaParseResponseHeaderScalar(
-          entry.trim(),
-          descriptor.itemValueType ?? 'unknown'
-        )
-      );
+    return modestaParseResponseHeaderArrayValue(
+      value,
+      descriptor.itemValueType
+    );
   }
 
   return modestaParseResponseHeaderScalar(value, descriptor.valueType);
@@ -309,15 +341,23 @@ const modestaProjectResponse = (
     return projectedHeaders;
   }
   if (wrapResponseBody) {
-    return {
-      body,
-      ...projectedHeaders,
-    };
+    return modestaAssignProperties(
+      {
+        body,
+      },
+      projectedHeaders
+    );
   }
-  return {
-    ...(body as Record<string, unknown>),
-    ...projectedHeaders,
-  };
+  if (typeof body === 'object' && Array.isArray(body) === false) {
+    return modestaAssignProperties(
+      body as Record<string, unknown>,
+      projectedHeaders
+    );
+  }
+  return modestaAssignProperties(
+    { ...(body as Record<string, unknown>) },
+    projectedHeaders
+  );
 };
 
 const modestaReadResponseBody = (response: Response) => {
@@ -353,7 +393,7 @@ const modestaReadResponseBody = (response: Response) => {
 export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSenderWithoutContext<undefined> => {
   const fetchImplementation = options.fetch ?? globalThis.fetch;
   const hasDefaultHeaders =
-    options.headers != null && modestaHasOwnProperties(options.headers);
+    options.headers && modestaHasOwnProperties(options.headers);
   if (typeof fetchImplementation !== 'function') {
     throw new Error(
       'Fetch implementation is not available. Pass CreateFetchSenderOptions.fetch explicitly.'
@@ -370,33 +410,33 @@ export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSe
     const headers =
       hasDefaultHeaders === false
         ? requestHeaders
-        : requestHeaders == null
-          ? options.headers
-          : {
+        : requestHeaders
+          ? {
               ...options.headers,
               ...requestHeaders,
-            };
+            }
+          : options.headers;
     const body = modestaSerializeFetchBody(
       request.body,
       request.headers['content-type']
     );
     const requestInit: RequestInit =
-      options.init == null
+      options.init
         ? {
+            ...options.init,
             method: request.method,
           }
         : {
-            ...options.init,
             method: request.method,
           };
 
-    if (headers != null) {
+    if (headers) {
       requestInit.headers = headers;
     }
     if (body !== undefined) {
       requestInit.body = body;
     }
-    if (accessorOptions?.signal != null) {
+    if (accessorOptions?.signal) {
       requestInit.signal = accessorOptions.signal;
     }
 

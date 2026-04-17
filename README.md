@@ -166,13 +166,19 @@ Add it to your `devDependencies`:
 npm install -D modesta
 ```
 
+Or, you can install CLI command `modesta` globally:
+
+```bash
+npm install -g modesta
+```
+
 Or, you can use CLI directly with `npx` (see next section.)
 
 ## Usage
 
 ### CLI
 
-If you use it as a CLI, for example:
+If you use it as a CLI, for example (with `npx`):
 
 ```bash
 npx modesta
@@ -418,7 +424,7 @@ export function create_users_accessor<TAccessorInterfaceContext, TAccessorContex
 }
 ```
 
-## Type Conversion
+### Type Conversion
 
 OpenAPI schemas are converted to TypeScript roughly as follows:
 
@@ -438,7 +444,7 @@ Generated files start with a header like this:
 // Do not edit manually
 ```
 
-## Comment Reflection
+### Comment Reflection
 
 - OpenAPI `summary` and `description` are reflected into accessor method JSDoc comments
 - Schema and property `description` fields are also reflected into generated type definitions

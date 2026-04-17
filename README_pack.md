@@ -160,13 +160,19 @@ Add it to your `devDependencies`:
 npm install -D modesta
 ```
 
+Or, you can install CLI command `modesta` globally:
+
+```bash
+npm install -g modesta
+```
+
 Or, you can use CLI directly with `npx` (see next section.)
 
 ## Usage
 
 ### CLI
 
-If you use it as a CLI, for example:
+If you use it as a CLI, for example (with `npx`):
 
 ```bash
 npx modesta

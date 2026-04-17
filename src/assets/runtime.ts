@@ -102,8 +102,11 @@ export interface CreateFetchSenderOptions {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-const modestaUrlBase = 'http://modesta.invalid';
 const modestaJsonMediaTypePattern = /json/i;
+const modestaEmptyResponseHeaders: readonly AccessorResponseHeaderDescriptor[] = [];
+
+const modestaEncodeQueryComponent = (value: string) =>
+  encodeURIComponent(value).replaceAll('%20', '+');
 
 const modestaBuildUrl = (
   path: string,
@@ -111,16 +114,34 @@ const modestaBuildUrl = (
   queryParameters: Record<string, unknown>
 ) => {
   let resolvedPath = path;
-  for (const [key, value] of Object.entries(pathParameters)) {
-    resolvedPath = resolvedPath.replaceAll(`{${key}}`, encodeURIComponent(String(value)));
+  for (const key in pathParameters) {
+    if (Object.hasOwn(pathParameters, key) === false) {
+      continue;
+    }
+
+    resolvedPath = resolvedPath.replaceAll(
+      `{${key}}`,
+      encodeURIComponent(String(pathParameters[key]))
+    );
   }
-  const url = new URL(resolvedPath, modestaUrlBase);
-  for (const [key, value] of Object.entries(queryParameters)) {
+
+  let query = '';
+  let queryPrefix = resolvedPath.includes('?') ? '&' : '?';
+  for (const key in queryParameters) {
+    if (Object.hasOwn(queryParameters, key) === false) {
+      continue;
+    }
+
+    const value = queryParameters[key];
     if (value != null) {
-      url.searchParams.set(key, String(value));
+      query += queryPrefix;
+      queryPrefix = '&';
+      query += modestaEncodeQueryComponent(key);
+      query += '=';
+      query += modestaEncodeQueryComponent(String(value));
     }
   }
-  return `${url.pathname}${url.search}`;
+  return `${resolvedPath}${query}`;
 };
 
 const modestaBuildHeaders = (
@@ -129,7 +150,12 @@ const modestaBuildHeaders = (
   accept: string | undefined
 ) => {
   const headers: Record<string, string> = {};
-  for (const [key, value] of Object.entries(headerParameters)) {
+  for (const key in headerParameters) {
+    if (Object.hasOwn(headerParameters, key) === false) {
+      continue;
+    }
+
+    const value = headerParameters[key];
     if (value != null) {
       headers[key] = String(value);
     }
@@ -155,6 +181,18 @@ const modestaSerializeFetchBody = (
     : body;
 };
 
+const modestaHasPropertyName = (
+  propertyNames: readonly string[],
+  propertyName: string
+) => {
+  for (let index = 0; index < propertyNames.length; index += 1) {
+    if (propertyNames[index] === propertyName) {
+      return true;
+    }
+  }
+  return false;
+};
+
 const modestaExcludeProperties = (
   value: unknown,
   propertyNames: readonly string[]
@@ -163,11 +201,31 @@ const modestaExcludeProperties = (
     return value;
   }
 
-  const clonedValue = Array.isArray(value) ? [...value] : { ...value };
-  for (const propertyName of propertyNames) {
-    delete (clonedValue as Record<string, unknown>)[propertyName];
+  if (propertyNames.length === 0) {
+    return value;
   }
-  return clonedValue;
+
+  if (Array.isArray(value)) {
+    const clonedValue = value.slice();
+    for (let index = 0; index < propertyNames.length; index += 1) {
+      delete (clonedValue as unknown as Record<string, unknown>)[
+        propertyNames[index]
+      ];
+    }
+    return clonedValue;
+  }
+
+  const sourceValue = value as Record<string, unknown>;
+  const projectedValue: Record<string, unknown> = {};
+  for (const key in sourceValue) {
+    if (
+      Object.hasOwn(sourceValue, key) &&
+      modestaHasPropertyName(propertyNames, key) === false
+    ) {
+      projectedValue[key] = sourceValue[key];
+    }
+  }
+  return projectedValue;
 };
 
 const modestaParseResponseHeaderScalar = (

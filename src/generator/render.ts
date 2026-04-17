@@ -401,6 +401,60 @@ const renderAccessorInterfaces = (
     renderAccessorInterface(context, accessorGroup, true),
   ].join('\n\n');
 
+const getOperationResponseHeadersConstName = (
+  accessorGroup: AccessorGroupDefinition,
+  operation: OperationDefinition
+) =>
+  `modestaResponseHeaders_${accessorGroup.interfaceName}_${operation.memberName}`;
+
+const getOperationExcludedPropertiesConstName = (
+  accessorGroup: AccessorGroupDefinition,
+  operation: OperationDefinition
+) =>
+  `modestaExcludedProperties_${accessorGroup.interfaceName}_${operation.memberName}`;
+
+const renderAccessorFactoryConstants = (
+  context: OpenApiContext,
+  accessorGroup: AccessorGroupDefinition
+) => {
+  const definitions: string[] = [];
+
+  for (const operation of accessorGroup.operations) {
+    if (operation.response.headers.length > 0) {
+      definitions.push(
+        `const ${getOperationResponseHeadersConstName(accessorGroup, operation)}: readonly AccessorResponseHeaderDescriptor[] = ${renderResponseHeaderDescriptorArray(
+          context,
+          operation.response.headers
+        )};`
+      );
+    }
+
+    if (
+      operation.requestBody != null &&
+      shouldUseRequestBodyEnvelope(context, operation) === false
+    ) {
+      const parameterPropertyNames = getOperationParameters(operation).map(
+        (parameter) => parameter.propertyName
+      );
+      if (parameterPropertyNames.length > 0) {
+        definitions.push(
+          `const ${getOperationExcludedPropertiesConstName(accessorGroup, operation)} = ${renderLiteral(parameterPropertyNames)};`
+        );
+      }
+    }
+  }
+
+  return definitions.join('\n');
+};
+
+const renderOperationResponseHeadersExpression = (
+  accessorGroup: AccessorGroupDefinition,
+  operation: OperationDefinition
+) =>
+  operation.response.headers.length === 0
+    ? 'modestaEmptyResponseHeaders'
+    : getOperationResponseHeadersConstName(accessorGroup, operation);
+
 const renderAccessorFactory = (
   context: OpenApiContext,
   accessorGroup: AccessorGroupDefinition
@@ -412,6 +466,15 @@ const renderAccessorFactory = (
   const accessorWithContextInterfaceName = getAccessorWithContextInterfaceName(
     accessorGroup.interfaceName
   );
+  const renderedConstants = renderAccessorFactoryConstants(
+    context,
+    accessorGroup
+  );
+
+  if (renderedConstants.length > 0) {
+    push(renderedConstants);
+    push();
+  }
 
   push(
     renderTaggedDocumentationComment(
@@ -525,13 +588,14 @@ const renderAccessorFactory = (
       `      body: ${renderRequestBodyArgumentExpression(
         context,
         operation,
+        accessorGroup,
         argumentMode === 'optional'
       )},`
     );
     push(
-      `      responseHeaders: ${renderResponseHeaderDescriptorArray(
-        context,
-        operation.response.headers
+      `      responseHeaders: ${renderOperationResponseHeadersExpression(
+        accessorGroup,
+        operation
       )},`
     );
     push(
@@ -1502,6 +1566,7 @@ const hasUnsupportedComposition = (schema: JsonRecord) => {
 const renderRequestBodyArgumentExpression = (
   context: OpenApiContext,
   operation: OperationDefinition,
+  accessorGroup: AccessorGroupDefinition,
   optionalArguments: boolean
 ) => {
   if (operation.requestBody == null) {
@@ -1519,7 +1584,10 @@ const renderRequestBodyArgumentExpression = (
     return 'args';
   }
 
-  return `modestaExcludeProperties(args, ${renderLiteral(parameterPropertyNames)})`;
+  return `modestaExcludeProperties(args, ${getOperationExcludedPropertiesConstName(
+    accessorGroup,
+    operation
+  )})`;
 };
 
 const getResponseHeaderValueDescriptor = (

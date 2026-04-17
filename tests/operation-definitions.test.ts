@@ -950,6 +950,15 @@ describe('operation definition generation', () => {
     );
   });
 
+  it('hoists excluded request body property names into generated constants', async () => {
+    expect(edgeCaseGeneratedSource).toContain(
+      'const modestaExcludedProperties_CreateItem_post = ["path_id","query_xApiKey","header_xApiKey"];'
+    );
+    expect(edgeCaseGeneratedSource).toContain(
+      'body: modestaExcludeProperties(args, modestaExcludedProperties_CreateItem_post),'
+    );
+  });
+
   it('uses primitive request bodies directly when no flattened parameters are present', async () => {
     expect(edgeCaseGeneratedSource).toContain(
       'readonly post: (args: string, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
@@ -1107,6 +1116,19 @@ describe('operation definition generation', () => {
   });
 
   it('returns projected response headers when the response body is absent', async () => {
+    expect(edgeCaseGeneratedSource).toContain(
+      'const modestaEmptyResponseHeaders: readonly AccessorResponseHeaderDescriptor[] = [];'
+    );
+    expect(edgeCaseGeneratedSource).toContain(
+      'responseHeaders: modestaEmptyResponseHeaders,'
+    );
+    expect(edgeCaseGeneratedSource).toContain(
+      'const modestaResponseHeaders_GetToken_get: readonly AccessorResponseHeaderDescriptor[] = ['
+    );
+    expect(edgeCaseGeneratedSource).toContain(
+      'responseHeaders: modestaResponseHeaders_GetToken_get,'
+    );
+
     const responseHeadersBlock = getInterfaceBlock(
       edgeCaseGeneratedSource,
       'GetToken_get_response_headers'
@@ -1133,6 +1155,35 @@ describe('operation definition generation', () => {
     await expect(accessor.get()).resolves.toEqual({
       xRequestId: 'req-42',
     });
+  });
+
+  it('preserves URL encoding for path and query parameters in generated sender descriptors', async () => {
+    const sender = vi.fn(async (request: unknown) => request);
+    const accessor =
+      edgeCaseGeneratedModule.create_GetNormalizedDistinct_accessor(sender);
+
+    await accessor.get({
+      tenantId: 'tenant#1',
+      userId: 'query &+?=',
+      user_id: 'route/42 alpha?',
+    });
+
+    expect(sender).toHaveBeenCalledWith(
+      {
+        operationName: 'GetNormalizedDistinct.get',
+        method: 'GET',
+        url: '/normalized-distinct/route%2F42%20alpha%3F?user-id=query+%26%2B%3F%3D',
+        headers: {
+          'tenant.id': 'tenant#1',
+          accept: 'application/json',
+        },
+        body: undefined,
+        responseHeaders: [],
+        wrapResponseBody: false,
+      },
+      undefined,
+      undefined
+    );
   });
 
   it('returns primitive response bodies directly when response headers are absent', async () => {

@@ -436,6 +436,7 @@ OpenAPI スキーマは、おおむね次のように TypeScript へ変換され
 
 - OpenAPI の `summary` と `description` は、アクセサメソッドの JSDoc に反映されます
 - スキーマやプロパティの `description` も、生成される型定義へ反映されます
+- OpenAPI の `deprecated: true` は、生成される JSDoc の `@deprecated` に反映されます
 - つまり、Swagger 側にコメントや注釈が反映されていれば、その情報をそのまま利用できます
 
 ---

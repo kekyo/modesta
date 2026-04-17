@@ -80,6 +80,7 @@ export const resolveParameters = (
     const propertyName = normalizeParameterName(name, 'value');
     return {
       description: getString(parameter, 'description'),
+      deprecated: getBoolean(parameter, 'deprecated') ?? false,
       duplicatedPropertyName: undefined,
       location,
       name,
@@ -230,6 +231,7 @@ export const resolveResponseHeaders = (
       const propertyName = normalizeParameterName(name, 'header');
       return {
         description: getString(header, 'description'),
+        deprecated: getBoolean(header, 'deprecated') ?? false,
         duplicatedPropertyName: undefined,
         name,
         originalPropertyName: propertyName,
@@ -385,6 +387,38 @@ export const resolveSchemaDescription = (
   }
 
   return undefined;
+};
+
+export const resolveSchemaDeprecated = (
+  document: JsonRecord,
+  schema: JsonRecord
+) => {
+  const directDeprecated = getBoolean(schema, 'deprecated');
+  if (directDeprecated != null) {
+    return directDeprecated;
+  }
+
+  const directReference = getDirectReference(schema);
+  if (directReference != null) {
+    return (
+      getBoolean(
+        resolveReferenceObject(document, { $ref: directReference }),
+        'deprecated'
+      ) ?? false
+    );
+  }
+
+  const allOfReference = getSingleReferenceFromAllOf(schema);
+  if (allOfReference != null) {
+    return (
+      getBoolean(
+        resolveReferenceObject(document, { $ref: allOfReference }),
+        'deprecated'
+      ) ?? false
+    );
+  }
+
+  return false;
 };
 
 export const parseOpenApiDocument = (

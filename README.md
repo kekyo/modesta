@@ -442,6 +442,7 @@ Generated files start with a header like this:
 
 - OpenAPI `summary` and `description` are reflected into accessor method JSDoc comments
 - Schema and property `description` fields are also reflected into generated type definitions
+- OpenAPI `deprecated: true` is reflected into generated JSDoc as `@deprecated`
 - In other words, if your Swagger document already carries comments or annotations, modesta can use them as-is
 
 ---

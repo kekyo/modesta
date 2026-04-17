@@ -15,12 +15,14 @@ export interface NamingContext {
 
 export interface SchemaDefinition {
   description: string | undefined;
+  deprecated: boolean;
   rawName: string;
   typeName: string;
 }
 
 export interface ParameterDefinition {
   description: string | undefined;
+  deprecated: boolean;
   location: 'path' | 'query' | 'header';
   duplicatedPropertyName: string | undefined;
   name: string;
@@ -32,6 +34,7 @@ export interface ParameterDefinition {
 
 export interface ResponseHeaderDefinition {
   description: string | undefined;
+  deprecated: boolean;
   duplicatedPropertyName: string | undefined;
   name: string;
   originalPropertyName: string;
@@ -65,6 +68,7 @@ export interface OperationDefinition {
   argumentsTypeName: string;
   description: string | undefined;
   descriptorOperationName: string;
+  deprecated: boolean;
   groupName: string;
   headerParametersTypeName: string | undefined;
   headerParameters: ParameterDefinition[];
@@ -96,6 +100,7 @@ export interface AccessorGroupDefinition {
 
 export interface RawOperationDefinition {
   description: string | undefined;
+  deprecated: boolean;
   headerParameters: ParameterDefinition[];
   method: string;
   operationId: string | undefined;

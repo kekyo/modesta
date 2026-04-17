@@ -658,6 +658,10 @@ describe('operation definition generation', () => {
 
   it('provides a fetch-based sender helper', async () => {
     const signal = new AbortController().signal;
+    const json = vi.fn(async () => ({ id: '42', source: 'route' }));
+    const text = vi.fn(async () =>
+      JSON.stringify({ id: '42', source: 'route' })
+    );
     const fetchImplementation = vi.fn(
       async (input: URL, init?: RequestInit) => {
         expect(String(input)).toBe('https://api.example.com/route/42');
@@ -680,7 +684,8 @@ describe('operation definition generation', () => {
             get: (name: string) =>
               name === 'content-type' ? 'application/json' : null,
           },
-          text: async () => JSON.stringify({ id: '42', source: 'route' }),
+          json,
+          text,
         };
       }
     );
@@ -708,6 +713,8 @@ describe('operation definition generation', () => {
       source: 'route',
     });
     expect(fetchImplementation).toHaveBeenCalledTimes(1);
+    expect(json).toHaveBeenCalledTimes(1);
+    expect(text).not.toHaveBeenCalled();
   });
 
   it('returns undefined from the fetch-based sender helper for empty responses', async () => {
@@ -1178,7 +1185,7 @@ describe('operation definition generation', () => {
           get: (name: string) =>
             name === 'content-type' ? 'application/json' : null,
         },
-        text: async () => JSON.stringify([1, 2, 3]),
+        json: async () => [1, 2, 3],
       })),
     });
     const accessor = edgeCaseGeneratedModule.create_GetNumbers_accessor(sender);
@@ -1205,7 +1212,7 @@ describe('operation definition generation', () => {
                 ? 'etag-42'
                 : null,
         },
-        text: async () => JSON.stringify({ value: 'alpha' }),
+        json: async () => ({ value: 'alpha' }),
       })),
     });
     const accessor =
@@ -1273,7 +1280,7 @@ describe('operation definition generation', () => {
                 ? 'etag-100'
                 : null,
         },
-        text: async () => JSON.stringify([1, 2, 3]),
+        json: async () => [1, 2, 3],
       })),
     });
     const accessor =
@@ -1327,7 +1334,7 @@ describe('operation definition generation', () => {
                     ? 'header-tag-2'
                     : null,
         },
-        text: async () => JSON.stringify({ etag: 'body-tag' }),
+        json: async () => ({ etag: 'body-tag' }),
       })),
     });
     const accessor =

@@ -250,6 +250,27 @@ const modestaProjectResponse = (
   };
 };
 
+const modestaReadResponseBody = (response: Response) => {
+  if (
+    response.status === 204 ||
+    response.status === 205 ||
+    response.status === 304 ||
+    response.headers.get('content-length') === '0'
+  ) {
+    return Promise.resolve(undefined);
+  }
+
+  const responseContentType = response.headers.get('content-type');
+  if (
+    responseContentType != null &&
+    modestaJsonMediaTypePattern.test(responseContentType)
+  ) {
+    return response.json();
+  }
+
+  return response.text();
+};
+
 /////////////////////////////////////////////////////////////////////////////////
 
 /**
@@ -302,17 +323,7 @@ export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSe
       response,
       request.responseHeaders
     );
-    const responseText = await response.text();
-    const responseBody =
-      responseText.length === 0
-        ? undefined
-        : (() => {
-            const responseContentType = response.headers.get('content-type');
-            return responseContentType != null &&
-              modestaJsonMediaTypePattern.test(responseContentType)
-              ? JSON.parse(responseText)
-              : responseText;
-          })();
+    const responseBody = await modestaReadResponseBody(response);
 
     return modestaProjectResponse(
       responseBody,

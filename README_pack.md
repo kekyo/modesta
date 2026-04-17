@@ -142,8 +142,6 @@ const user = await userApi.get({ id: '42' });
 console.log(user.name);
 ```
 
-When consuming generated code, enabling TypeScript's `exactOptionalPropertyTypes` is recommended. This allows stricter checking of whether context values are present.
-
 ### Main Features
 
 - Reads Swagger/OpenAPI JSON and YAML and generates TypeScript source code

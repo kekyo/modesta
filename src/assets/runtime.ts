@@ -61,31 +61,25 @@ export interface AccessorOptionsWithContext<TAccessorContext>
  * Sender function used by generated accessors that do not require per-call context values.
  * @typeParam TResponse Response payload type.
  * @typeParam TRequestBody Request body payload type.
- * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.
  * @param request Prepared request descriptor.
- * @param interfaceContext Context value bound when creating the accessor implementation.
  * @param options Additional accessor call options without per-call context.
  * @returns Promise that resolves to the typed response payload.
  */
-export type AccessorSenderWithoutContext<TAccessorInterfaceContext> = <TResponse, TRequestBody>(
+export type AccessorSenderWithoutContext = <TResponse, TRequestBody>(
   request: AccessorRequestDescriptor<TRequestBody>,
-  interfaceContext: TAccessorInterfaceContext,
   options: AccessorOptionsWithoutContext | undefined) => Promise<TResponse>;
 
 /**
  * Sender function used by generated accessors that require per-call context values.
  * @typeParam TResponse Response payload type.
  * @typeParam TRequestBody Request body payload type.
- * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.
  * @typeParam TAccessorContext Per-call context value type passed to the sender.
  * @param request Prepared request descriptor.
- * @param interfaceContext Context value bound when creating the accessor implementation.
  * @param options Additional accessor call options with per-call context.
  * @returns Promise that resolves to the typed response payload.
  */
-export type AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext> = <TResponse, TRequestBody>(
+export type AccessorSenderWithContext<TAccessorContext> = <TResponse, TRequestBody>(
   request: AccessorRequestDescriptor<TRequestBody>,
-  interfaceContext: TAccessorInterfaceContext,
   options: AccessorOptionsWithContext<TAccessorContext>) => Promise<TResponse>;
 
 /** Options that configure the fetch-based sender. */
@@ -388,34 +382,32 @@ const modestaReadResponseBody = (response: Response) => {
  * @param options Options that configure the fetch-based sender.
  * @returns Sender implementation that executes requests via the fetch API.
  * @remarks When `options.fetch` is omitted, `globalThis.fetch` must be available.
- * Accessor interface context values are ignored by this sender implementation.
+ * Per-call context values are not accepted by this sender implementation.
  */
-export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSenderWithoutContext<undefined> => {
+export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSenderWithoutContext => {
   const fetchImplementation = options.fetch ?? globalThis.fetch;
-  const hasDefaultHeaders =
-    options.headers && modestaHasOwnProperties(options.headers);
   if (typeof fetchImplementation !== 'function') {
     throw new Error(
       'Fetch implementation is not available. Pass CreateFetchSenderOptions.fetch explicitly.'
     );
   }
+  const hasDefaultHeaders =
+    !!options.headers && modestaHasOwnProperties(options.headers);
 
   return async <TResponse, TRequestBody>(
     request: AccessorRequestDescriptor<TRequestBody>,
-    _interfaceContext: undefined,
     accessorOptions: AccessorOptionsWithoutContext | undefined
   ) => {
     const requestHeaders =
       modestaHasOwnProperties(request.headers) ? request.headers : undefined;
-    const headers =
-      hasDefaultHeaders === false
-        ? requestHeaders
-        : requestHeaders
-          ? {
-              ...options.headers,
-              ...requestHeaders,
-            }
-          : options.headers;
+    const headers = hasDefaultHeaders
+      ? !!requestHeaders
+        ? {
+            ...options.headers,
+            ...requestHeaders,
+          }
+        : options.headers
+      : requestHeaders;
     const body = modestaSerializeFetchBody(
       request.body,
       request.headers['content-type']

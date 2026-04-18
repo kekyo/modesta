@@ -357,9 +357,7 @@ describe('xml comments integration', () => {
         ' * Sender function used by generated accessors that do not require per-call context values.',
         ' * @typeParam TResponse Response payload type.',
         ' * @typeParam TRequestBody Request body payload type.',
-        ' * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.',
         ' * @param request Prepared request descriptor.',
-        ' * @param interfaceContext Context value bound when creating the accessor implementation.',
         ' * @param options Additional accessor call options without per-call context.',
         ' * @returns Promise that resolves to the typed response payload.',
         ' */',
@@ -373,10 +371,8 @@ describe('xml comments integration', () => {
         ' * Sender function used by generated accessors that require per-call context values.',
         ' * @typeParam TResponse Response payload type.',
         ' * @typeParam TRequestBody Request body payload type.',
-        ' * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.',
         ' * @typeParam TAccessorContext Per-call context value type passed to the sender.',
         ' * @param request Prepared request descriptor.',
-        ' * @param interfaceContext Context value bound when creating the accessor implementation.',
         ' * @param options Additional accessor call options with per-call context.',
         ' * @returns Promise that resolves to the typed response payload.',
         ' */',
@@ -417,7 +413,7 @@ describe('xml comments integration', () => {
         ' * @param options Options that configure the fetch-based sender.',
         ' * @returns Sender implementation that executes requests via the fetch API.',
         ' * @remarks When `options.fetch` is omitted, `globalThis.fetch` must be available.',
-        ' * Accessor interface context values are ignored by this sender implementation.',
+        ' * Per-call context values are not accepted by this sender implementation.',
         ' */',
       ].join('\n')
     );
@@ -427,12 +423,10 @@ describe('xml comments integration', () => {
       [
         '/**',
         ' * Creates a xml_comments accessor implementation.',
-        ' * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.',
         ' * @typeParam TAccessorContext Per-call context value type passed to the sender.',
         ' * @param sender Sender implementation used to execute generated requests.',
-        ' * @param interfaceContext Context value passed to the sender for every accessor call. This may be ignored depending on the sender.',
         ' * @returns xml_comments accessor implementation bound to the provided sender.',
-        ' * @remarks The interfaceContext argument can be omitted when the sender accepts `undefined` as its interface context type. When the sender requires per-call context values, the returned accessor methods require `options.context` for each invocation.',
+        ' * @remarks When the sender requires per-call context values, the returned accessor methods require `options.context` for each invocation.',
         ' */',
       ].join('\n')
     );

@@ -375,21 +375,12 @@ describe('operation definition generation', () => {
     );
     expect(generatedSource).toContain(
       [
-        'export function create_GetRouteValue_accessor(sender: AccessorSenderWithoutContext<undefined>): GetRouteValue;',
-        'export function create_GetRouteValue_accessor<TAccessorInterfaceContext>(',
-        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext>,',
-        '  interfaceContext: TAccessorInterfaceContext',
-        '): GetRouteValue;',
+        'export function create_GetRouteValue_accessor(sender: AccessorSenderWithoutContext): GetRouteValue;',
         'export function create_GetRouteValue_accessor<TAccessorContext>(',
-        '  sender: AccessorSenderWithContext<undefined, TAccessorContext>',
+        '  sender: AccessorSenderWithContext<TAccessorContext>',
         '): GetRouteValue_with_context<TAccessorContext>;',
-        'export function create_GetRouteValue_accessor<TAccessorInterfaceContext, TAccessorContext>(',
-        '  sender: AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
-        '  interfaceContext: TAccessorInterfaceContext',
-        '): GetRouteValue_with_context<TAccessorContext>;',
-        'export function create_GetRouteValue_accessor<TAccessorInterfaceContext, TAccessorContext>(',
-        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext> | AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
-        '  interfaceContext?: TAccessorInterfaceContext',
+        'export function create_GetRouteValue_accessor<TAccessorContext>(',
+        '  sender: AccessorSenderWithoutContext | AccessorSenderWithContext<TAccessorContext>',
         '): GetRouteValue | GetRouteValue_with_context<TAccessorContext> {',
       ].join('\n')
     );
@@ -432,7 +423,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       { signal }
     );
   });
@@ -457,19 +447,15 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
 
   it('builds sender descriptors for operations without arguments', async () => {
-    const sender = vi.fn(
-      async (request: unknown, context: unknown, options: unknown) => ({
-        request,
-        context,
-        options,
-      })
-    );
+    const sender = vi.fn(async (request: unknown, options: unknown) => ({
+      request,
+      options,
+    }));
     const accessor = generatedModule.create_ListItems_accessor(sender);
     const signal = new AbortController().signal;
 
@@ -487,7 +473,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       { signal }
     );
   });
@@ -513,7 +498,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -541,7 +525,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -569,17 +552,16 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
 
   it('passes per-call context values to sender calls when requested by the sender type', async () => {
     const signal = new AbortController().signal;
-    const sender = vi.fn(async (request: unknown) => request);
-    const accessor = generatedModule.create_CreateItem_accessor(sender, {
-      traceId: 'trace-42',
-    });
+    const sender = vi.fn(
+      async (_request: unknown, options: unknown) => options
+    );
+    const accessor = generatedModule.create_CreateItem_accessor(sender);
 
     await accessor.post(
       {
@@ -607,9 +589,6 @@ describe('operation definition generation', () => {
         },
         responseHeaders: [],
         wrapResponseBody: false,
-      },
-      {
-        traceId: 'trace-42',
       },
       {
         context: {
@@ -647,18 +626,15 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
 
-  it('passes bound context values to sender calls', async () => {
+  it('does not pass interface context values to sender calls', async () => {
     const sender = vi.fn(
-      async (_request: unknown, context: unknown) => context
+      async (_request: unknown, options: unknown) => options
     );
-    const accessor = generatedModule.create_DeleteItem_accessor(sender, {
-      traceId: 'trace-42',
-    });
+    const accessor = generatedModule.create_DeleteItem_accessor(sender);
 
     await accessor._delete({
       id: '42',
@@ -674,33 +650,28 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      {
-        traceId: 'trace-42',
-      },
       undefined
     );
   });
 
-  it('emits sender aliases with exact interface context types', () => {
+  it('emits sender aliases without interface context types', () => {
     expect(generatedSource).toContain(
       [
-        'export type AccessorSenderWithoutContext<TAccessorInterfaceContext> = <TResponse, TRequestBody>(',
+        'export type AccessorSenderWithoutContext = <TResponse, TRequestBody>(',
         '  request: AccessorRequestDescriptor<TRequestBody>,',
-        '  interfaceContext: TAccessorInterfaceContext,',
         '  options: AccessorOptionsWithoutContext | undefined) => Promise<TResponse>;',
       ].join('\n')
     );
     expect(generatedSource).toContain(
       [
-        'export type AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext> = <TResponse, TRequestBody>(',
+        'export type AccessorSenderWithContext<TAccessorContext> = <TResponse, TRequestBody>(',
         '  request: AccessorRequestDescriptor<TRequestBody>,',
-        '  interfaceContext: TAccessorInterfaceContext,',
         '  options: AccessorOptionsWithContext<TAccessorContext>) => Promise<TResponse>;',
       ].join('\n')
     );
   });
 
-  it('type-checks interface context requirements for generated accessors', async () => {
+  it('type-checks sender and per-call context requirements for generated accessors', async () => {
     const diagnostics = await getTypeScriptDiagnostics({
       'generated.ts': generatedSource,
       'consumer.ts': [
@@ -715,32 +686,31 @@ describe('operation definition generation', () => {
         '  createFetchSender,',
         "} from './generated.ts';",
         '',
-        'const sender: AccessorSenderWithoutContext<string> = async <TResponse, TRequestBody>(',
+        'const sender: AccessorSenderWithoutContext = async <TResponse, TRequestBody>(',
         '  _request: AccessorRequestDescriptor<TRequestBody>,',
-        '  interfaceContext: string,',
         '  _options: AccessorOptionsWithoutContext | undefined',
-        '): Promise<TResponse> => interfaceContext as unknown as TResponse;',
+        "): Promise<TResponse> => 'ok' as unknown as TResponse;",
         '',
-        '// @ts-expect-error interface context is required for non-undefined sender types',
-        'create_DeleteItem_accessor(sender);',
+        'const deleteAccessor = create_DeleteItem_accessor(sender);',
+        "deleteAccessor._delete({ id: '42' });",
+        '// @ts-expect-error accessor factories no longer accept interface context arguments',
         "create_DeleteItem_accessor(sender, 'trace-42');",
         '',
-        'const senderWithContext: AccessorSenderWithContext<string, { requestId: string }> = async <TResponse, TRequestBody>(',
+        'const senderWithContext: AccessorSenderWithContext<{ requestId: string }> = async <TResponse, TRequestBody>(',
         '  _request: AccessorRequestDescriptor<TRequestBody>,',
-        '  interfaceContext: string,',
         '  options: AccessorOptionsWithContext<{ requestId: string }>',
-        '): Promise<TResponse> => ({',
-        '  interfaceContext,',
-        '  requestId: options.context.requestId,',
-        '}) as TResponse;',
+        '): Promise<TResponse> => options.context as unknown as TResponse;',
         '',
-        '// @ts-expect-error interface context is required for non-undefined sender types',
-        'create_CreateItem_accessor(senderWithContext);',
+        'const createAccessor = create_CreateItem_accessor(senderWithContext);',
+        "createAccessor.post({ name: 'alpha' }, { context: { requestId: 'request-99' } });",
+        '// @ts-expect-error per-call context is required for senders with context',
+        "createAccessor.post({ name: 'alpha' });",
+        '// @ts-expect-error accessor factories no longer accept interface context arguments',
         "create_CreateItem_accessor(senderWithContext, 'trace-42');",
         '',
         "const fetchSender = createFetchSender({ baseUrl: 'https://example.com/' });",
         'create_DeleteItem_accessor(fetchSender);',
-        '// @ts-expect-error fetch sender only accepts undefined interface context',
+        '// @ts-expect-error accessor factories no longer accept interface context arguments',
         "create_DeleteItem_accessor(fetchSender, 'trace-42');",
         '',
       ].join('\n'),
@@ -932,7 +902,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -979,7 +948,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -1021,7 +989,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -1082,7 +1049,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -1121,7 +1087,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -1159,7 +1124,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -1208,7 +1172,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -1247,7 +1210,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -1318,7 +1280,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });

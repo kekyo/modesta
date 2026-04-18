@@ -486,20 +486,10 @@ const renderAccessorFactory = (
               'Sender implementation used to execute generated requests.',
             name: 'sender',
           },
-          {
-            description:
-              'Context value passed to the sender for every accessor call. This may be ignored depending on the sender.',
-            name: 'interfaceContext',
-          },
         ],
         remarks:
-          'The interfaceContext argument can be omitted when the sender accepts `undefined` as its interface context type. When the sender requires per-call context values, the returned accessor methods require `options.context` for each invocation.',
+          'When the sender requires per-call context values, the returned accessor methods require `options.context` for each invocation.',
         typeParams: [
-          {
-            description:
-              'Accessor interface context value type passed to the sender.',
-            name: 'TAccessorInterfaceContext',
-          },
           {
             description: 'Per-call context value type passed to the sender.',
             name: 'TAccessorContext',
@@ -510,38 +500,24 @@ const renderAccessorFactory = (
     )
   );
   push(
-    `export function ${accessorGroup.factoryName}(sender: AccessorSenderWithoutContext<undefined>): ${accessorGroup.interfaceName};`
+    `export function ${accessorGroup.factoryName}(sender: AccessorSenderWithoutContext): ${accessorGroup.interfaceName};`
   );
-  push(
-    `export function ${accessorGroup.factoryName}<TAccessorInterfaceContext>(`
-  );
-  push('  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext>,');
-  push('  interfaceContext: TAccessorInterfaceContext');
-  push(`): ${accessorGroup.interfaceName};`);
   push(`export function ${accessorGroup.factoryName}<TAccessorContext>(`);
-  push('  sender: AccessorSenderWithContext<undefined, TAccessorContext>');
+  push('  sender: AccessorSenderWithContext<TAccessorContext>');
   push(`): ${accessorWithContextInterfaceName}<TAccessorContext>;`);
+  push(`export function ${accessorGroup.factoryName}<TAccessorContext>(`);
   push(
-    `export function ${accessorGroup.factoryName}<TAccessorInterfaceContext, TAccessorContext>(`
+    '  sender: AccessorSenderWithoutContext | AccessorSenderWithContext<TAccessorContext>'
   );
-  push(
-    '  sender: AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,'
-  );
-  push('  interfaceContext: TAccessorInterfaceContext');
-  push(`): ${accessorWithContextInterfaceName}<TAccessorContext>;`);
-  push(
-    `export function ${accessorGroup.factoryName}<TAccessorInterfaceContext, TAccessorContext>(`
-  );
-  push(
-    '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext> | AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,'
-  );
-  push('  interfaceContext?: TAccessorInterfaceContext');
   push(
     `): ${accessorGroup.interfaceName} | ${accessorWithContextInterfaceName}<TAccessorContext> {`
   );
+  push('  const modestaSender = sender as <TResponse, TRequestBody>(');
+  push('    request: AccessorRequestDescriptor<TRequestBody>,');
   push(
-    '  const modestaInterfaceContext = interfaceContext as TAccessorInterfaceContext;'
+    '    options: AccessorOptionsWithoutContext | AccessorOptionsWithContext<TAccessorContext> | undefined'
   );
+  push('  ) => Promise<TResponse>;');
   push('  return {');
 
   for (const operation of accessorGroup.operations) {
@@ -562,7 +538,7 @@ const renderAccessorFactory = (
         : 'undefined';
 
     push(
-      `    ${renderPropertyName(operation.memberName)}: async (${argumentToken}) => sender<${responseTypeExpression}, ${requestBodyTypeExpression}>({`
+      `    ${renderPropertyName(operation.memberName)}: async (${argumentToken}) => modestaSender<${responseTypeExpression}, ${requestBodyTypeExpression}>({`
     );
     push(
       `      operationName: ${renderLiteral(operation.descriptorOperationName)},`
@@ -607,7 +583,7 @@ const renderAccessorFactory = (
         operation.response
       )},`
     );
-    push('    }, modestaInterfaceContext, options),');
+    push('    }, options),');
   }
 
   push(

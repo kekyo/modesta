@@ -130,46 +130,28 @@ describe('CLI and format support', () => {
     expect(generatedSource).toContain('export interface ListSummaries {');
     expect(generatedSource).toContain(
       [
-        'export function create_LookupSummaries_accessor(sender: AccessorSenderWithoutContext<undefined>): LookupSummaries;',
-        'export function create_LookupSummaries_accessor<TAccessorInterfaceContext>(',
-        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext>,',
-        '  interfaceContext: TAccessorInterfaceContext',
-        '): LookupSummaries;',
+        'export function create_LookupSummaries_accessor(sender: AccessorSenderWithoutContext): LookupSummaries;',
         'export function create_LookupSummaries_accessor<TAccessorContext>(',
-        '  sender: AccessorSenderWithContext<undefined, TAccessorContext>',
+        '  sender: AccessorSenderWithContext<TAccessorContext>',
         '): LookupSummaries_with_context<TAccessorContext>;',
-        'export function create_LookupSummaries_accessor<TAccessorInterfaceContext, TAccessorContext>(',
-        '  sender: AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
-        '  interfaceContext: TAccessorInterfaceContext',
-        '): LookupSummaries_with_context<TAccessorContext>;',
-        'export function create_LookupSummaries_accessor<TAccessorInterfaceContext, TAccessorContext>(',
-        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext> | AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
-        '  interfaceContext?: TAccessorInterfaceContext',
+        'export function create_LookupSummaries_accessor<TAccessorContext>(',
+        '  sender: AccessorSenderWithoutContext | AccessorSenderWithContext<TAccessorContext>',
         '): LookupSummaries | LookupSummaries_with_context<TAccessorContext> {',
       ].join('\n')
     );
     expect(generatedSource).toContain(
       [
-        'export function create_ListSummaries_accessor(sender: AccessorSenderWithoutContext<undefined>): ListSummaries;',
-        'export function create_ListSummaries_accessor<TAccessorInterfaceContext>(',
-        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext>,',
-        '  interfaceContext: TAccessorInterfaceContext',
-        '): ListSummaries;',
+        'export function create_ListSummaries_accessor(sender: AccessorSenderWithoutContext): ListSummaries;',
         'export function create_ListSummaries_accessor<TAccessorContext>(',
-        '  sender: AccessorSenderWithContext<undefined, TAccessorContext>',
+        '  sender: AccessorSenderWithContext<TAccessorContext>',
         '): ListSummaries_with_context<TAccessorContext>;',
-        'export function create_ListSummaries_accessor<TAccessorInterfaceContext, TAccessorContext>(',
-        '  sender: AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
-        '  interfaceContext: TAccessorInterfaceContext',
-        '): ListSummaries_with_context<TAccessorContext>;',
-        'export function create_ListSummaries_accessor<TAccessorInterfaceContext, TAccessorContext>(',
-        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext> | AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
-        '  interfaceContext?: TAccessorInterfaceContext',
+        'export function create_ListSummaries_accessor<TAccessorContext>(',
+        '  sender: AccessorSenderWithoutContext | AccessorSenderWithContext<TAccessorContext>',
         '): ListSummaries | ListSummaries_with_context<TAccessorContext> {',
       ].join('\n')
     );
     expect(generatedSource).toContain(
-      'export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSenderWithoutContext<undefined> => {'
+      'export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSenderWithoutContext => {'
     );
   });
 
@@ -234,21 +216,12 @@ describe('CLI and format support', () => {
     expect(stdout).toContain('export interface ListSummaries {');
     expect(stdout).toContain(
       [
-        'export function create_LookupSummaries_accessor(sender: AccessorSenderWithoutContext<undefined>): LookupSummaries;',
-        'export function create_LookupSummaries_accessor<TAccessorInterfaceContext>(',
-        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext>,',
-        '  interfaceContext: TAccessorInterfaceContext',
-        '): LookupSummaries;',
+        'export function create_LookupSummaries_accessor(sender: AccessorSenderWithoutContext): LookupSummaries;',
         'export function create_LookupSummaries_accessor<TAccessorContext>(',
-        '  sender: AccessorSenderWithContext<undefined, TAccessorContext>',
+        '  sender: AccessorSenderWithContext<TAccessorContext>',
         '): LookupSummaries_with_context<TAccessorContext>;',
-        'export function create_LookupSummaries_accessor<TAccessorInterfaceContext, TAccessorContext>(',
-        '  sender: AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
-        '  interfaceContext: TAccessorInterfaceContext',
-        '): LookupSummaries_with_context<TAccessorContext>;',
-        'export function create_LookupSummaries_accessor<TAccessorInterfaceContext, TAccessorContext>(',
-        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext> | AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
-        '  interfaceContext?: TAccessorInterfaceContext',
+        'export function create_LookupSummaries_accessor<TAccessorContext>(',
+        '  sender: AccessorSenderWithoutContext | AccessorSenderWithContext<TAccessorContext>',
         '): LookupSummaries | LookupSummaries_with_context<TAccessorContext> {',
       ].join('\n')
     );

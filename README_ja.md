@@ -319,11 +319,11 @@ import {
 } from './generated/accessors';
 
 // アクセサ関数呼び出し毎に渡す context value
-type Context = {
+interface Context {
   authToken: string;
   baseUrl: string;
   requestId: string;
-};
+}
 
 // 独自のトランスポート層を使うSenderファクトリを定義する
 const createTransportSender = (): AccessorSenderWithContext<Context> => {
@@ -337,7 +337,7 @@ const createTransportSender = (): AccessorSenderWithContext<Context> => {
     });
 
     // axios: 呼び出しを実行する
-    const response = await axios.request({
+    const response = await axios.request<unknown>({
       url: preparedRequest.url.href,
       method: preparedRequest.method,
       headers: {
@@ -384,6 +384,8 @@ const result = await summaries.get(
   }
 );
 ```
+
+トランスポート層でも厳密な型指定を行いたい場合は、ラムダの引数型を明示した上で `axios.request<TResponse>()` を呼び出すこともできます。
 
 独自トランスポートがシリアライズ済み payload を要求する場合は、送信 body に `modestaSerializeRequestBody(request)` を使ってください。
 既に fetch 互換の `Response` を扱っている場合は、`modestaReadFetchResponseBody(response)` と `modestaProjectResponse()` を組み合わせられます。

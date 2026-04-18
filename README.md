@@ -323,11 +323,11 @@ import {
 } from './generated/accessors';
 
 // A context value passed for each accessor function call
-type Context = {
+interface Context {
   authToken: string;
   baseUrl: string;
   requestId: string;
-};
+}
 
 // Define a custom Sender factory
 const createTransportSender = (): AccessorSenderWithContext<Context> => {
@@ -341,7 +341,7 @@ const createTransportSender = (): AccessorSenderWithContext<Context> => {
     });
 
     // axios: Invoke it.
-    const response = await axios.request({
+    const response = await axios.request<unknown>({
       url: preparedRequest.url.href,
       method: preparedRequest.method,
       headers: {
@@ -389,6 +389,8 @@ const result = await summaries.get(
   }
 );
 ```
+
+If you want stricter transport-side typing, you can still add explicit parameter annotations to the lambda and call `axios.request<TResponse>()`.
 
 If a custom transport expects a serialized payload, use `modestaSerializeRequestBody(request)` for the outgoing body.
 If you already have a fetch-compatible `Response`, `modestaReadFetchResponseBody(response)` can be combined with `modestaProjectResponse()`.

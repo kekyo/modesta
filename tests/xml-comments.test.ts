@@ -286,7 +286,6 @@ describe('xml comments integration', () => {
       [
         '/**',
         ' * Prepared request descriptor used by generated accessors.',
-        ' * @typeParam TRequestBody Request body payload type.',
         ' */',
       ].join('\n')
     );
@@ -368,7 +367,6 @@ describe('xml comments integration', () => {
         '/**',
         ' * Sender function used by generated accessors that do not require per-call context values.',
         ' * @typeParam TResponse Response payload type.',
-        ' * @typeParam TRequestBody Request body payload type.',
         ' * @param request Prepared request descriptor.',
         ' * @param options Additional accessor call options without per-call context.',
         ' * @returns Promise that resolves to the typed response payload.',
@@ -382,7 +380,6 @@ describe('xml comments integration', () => {
         '/**',
         ' * Sender function used by generated accessors that require per-call context values.',
         ' * @typeParam TResponse Response payload type.',
-        ' * @typeParam TRequestBody Request body payload type.',
         ' * @typeParam TAccessorContext Per-call context value type passed to the sender.',
         ' * @param request Prepared request descriptor.',
         ' * @param options Additional accessor call options with per-call context.',
@@ -507,7 +504,6 @@ describe('xml comments integration', () => {
       [
         '/**',
         ' * Prepares transport-neutral request values for a sender implementation.',
-        ' * @typeParam TRequestBody Request body payload type.',
         ' * @param request Prepared request descriptor emitted by the generated accessor.',
         ' * @param accessorOptions Additional accessor call options passed to the sender.',
         ' * @param options Options that configure request preparation.',
@@ -522,7 +518,6 @@ describe('xml comments integration', () => {
       [
         '/**',
         ' * Serializes a request body using the accessor request content type.',
-        ' * @typeParam TRequestBody Request body payload type.',
         ' * @param request Prepared request descriptor emitted by the generated accessor.',
         ' * @returns Serialized body value for fetch-style transports, or undefined when the request has no body.',
         ' * @remarks JSON media types are stringified. Other body values are returned as-is.',
@@ -536,7 +531,6 @@ describe('xml comments integration', () => {
         '/**',
         ' * Projects a transport response into the generated accessor response shape.',
         ' * @typeParam TResponse Response payload type.',
-        ' * @typeParam TRequestBody Request body payload type.',
         ' * @param request Prepared request descriptor emitted by the generated accessor.',
         ' * @param response Transport response values used to project response headers and body.',
         ' * @returns Response value that matches the generated accessor contract.',

@@ -512,8 +512,8 @@ const renderAccessorFactory = (
   push(
     `): ${accessorGroup.interfaceName} | ${accessorWithContextInterfaceName}<TAccessorContext> {`
   );
-  push('  const modestaSender = sender as <TResponse, TRequestBody>(');
-  push('    request: AccessorRequestDescriptor<TRequestBody>,');
+  push('  const modestaSender = sender as <TResponse>(');
+  push('    request: AccessorRequestDescriptor,');
   push(
     '    options: AccessorOptionsWithoutContext | AccessorOptionsWithContext<TAccessorContext> | undefined'
   );
@@ -532,13 +532,8 @@ const renderAccessorFactory = (
       context,
       operation.response
     );
-    const requestBodyTypeExpression =
-      operation.requestBody != null
-        ? getOperationRequestBodyTypeExpression(context, operation.requestBody)
-        : 'undefined';
-
     push(
-      `    ${renderPropertyName(operation.memberName)}: async (${argumentToken}) => modestaSender<${responseTypeExpression}, ${requestBodyTypeExpression}>({`
+      `    ${renderPropertyName(operation.memberName)}: async (${argumentToken}) => modestaSender<${responseTypeExpression}>({`
     );
     push(
       `      operationName: ${renderLiteral(operation.descriptorOperationName)},`

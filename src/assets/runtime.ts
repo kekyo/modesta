@@ -2,9 +2,8 @@
 
 /**
  * Prepared request descriptor used by generated accessors.
- * @typeParam TRequestBody Request body payload type.
  */
-export interface AccessorRequestDescriptor<TRequestBody> {
+export interface AccessorRequestDescriptor {
   /** Stable operation name used for diagnostics and tracing. */
   readonly operationName: string;
   /** HTTP method sent to the endpoint. */
@@ -14,7 +13,7 @@ export interface AccessorRequestDescriptor<TRequestBody> {
   /** HTTP headers applied to the outgoing request. */
   readonly headers: Record<string, string>;
   /** Request body payload passed to the sender. */
-  readonly body: TRequestBody | undefined;
+  readonly body: unknown;
   /** Response header definitions used to project the sender result. */
   readonly responseHeaders: readonly AccessorResponseHeaderDescriptor[];
   /** Indicates that primitive or array response bodies must be exposed through a `body` member when response headers are also defined. */
@@ -60,26 +59,24 @@ export interface AccessorOptionsWithContext<TAccessorContext>
 /**
  * Sender function used by generated accessors that do not require per-call context values.
  * @typeParam TResponse Response payload type.
- * @typeParam TRequestBody Request body payload type.
  * @param request Prepared request descriptor.
  * @param options Additional accessor call options without per-call context.
  * @returns Promise that resolves to the typed response payload.
  */
-export type AccessorSenderWithoutContext = <TResponse, TRequestBody>(
-  request: AccessorRequestDescriptor<TRequestBody>,
+export type AccessorSenderWithoutContext = <TResponse>(
+  request: AccessorRequestDescriptor,
   options: AccessorOptionsWithoutContext | undefined) => Promise<TResponse>;
 
 /**
  * Sender function used by generated accessors that require per-call context values.
  * @typeParam TResponse Response payload type.
- * @typeParam TRequestBody Request body payload type.
  * @typeParam TAccessorContext Per-call context value type passed to the sender.
  * @param request Prepared request descriptor.
  * @param options Additional accessor call options with per-call context.
  * @returns Promise that resolves to the typed response payload.
  */
-export type AccessorSenderWithContext<TAccessorContext> = <TResponse, TRequestBody>(
-  request: AccessorRequestDescriptor<TRequestBody>,
+export type AccessorSenderWithContext<TAccessorContext> = <TResponse>(
+  request: AccessorRequestDescriptor,
   options: AccessorOptionsWithContext<TAccessorContext>) => Promise<TResponse>;
 
 /** Options that configure the fetch-based sender. */
@@ -410,17 +407,18 @@ const modestaComposeResponse = (
   );
 };
 
+/////////////////////////////////////////////////////////////////////////////////
+
 /**
  * Prepares transport-neutral request values for a sender implementation.
- * @typeParam TRequestBody Request body payload type.
  * @param request Prepared request descriptor emitted by the generated accessor.
  * @param accessorOptions Additional accessor call options passed to the sender.
  * @param options Options that configure request preparation.
  * @returns Request values resolved against the configured base URL.
  * @remarks The returned `body` is not serialized. Use `modestaSerializeRequestBody()` when a transport expects a serialized payload.
  */
-export const modestaPrepareRequest = <TRequestBody>(
-  request: AccessorRequestDescriptor<TRequestBody>,
+export const modestaPrepareRequest = (
+  request: AccessorRequestDescriptor,
   accessorOptions: AccessorOptions | undefined,
   options: ModestaPrepareRequestOptions
 ): ModestaPreparedRequest => ({
@@ -433,26 +431,24 @@ export const modestaPrepareRequest = <TRequestBody>(
 
 /**
  * Serializes a request body using the accessor request content type.
- * @typeParam TRequestBody Request body payload type.
  * @param request Prepared request descriptor emitted by the generated accessor.
  * @returns Serialized body value for fetch-style transports, or undefined when the request has no body.
  * @remarks JSON media types are stringified. Other body values are returned as-is.
  */
-export const modestaSerializeRequestBody = <TRequestBody>(
-  request: AccessorRequestDescriptor<TRequestBody>
+export const modestaSerializeRequestBody = (
+  request: AccessorRequestDescriptor
 ) => modestaSerializeFetchBody(request.body, request.headers['content-type']);
 
 /**
  * Projects a transport response into the generated accessor response shape.
  * @typeParam TResponse Response payload type.
- * @typeParam TRequestBody Request body payload type.
  * @param request Prepared request descriptor emitted by the generated accessor.
  * @param response Transport response values used to project response headers and body.
  * @returns Response value that matches the generated accessor contract.
  * @remarks Response headers defined by the accessor are parsed and merged into the returned body shape.
  */
-export const modestaProjectResponse = <TResponse, TRequestBody>(
-  request: AccessorRequestDescriptor<TRequestBody>,
+export const modestaProjectResponse = <TResponse>(
+  request: AccessorRequestDescriptor,
   response: ModestaResponseSource
 ) =>
   modestaComposeResponse(
@@ -505,10 +501,7 @@ export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSe
     );
   }
 
-  return async <TResponse, TRequestBody>(
-    request: AccessorRequestDescriptor<TRequestBody>,
-    accessorOptions: AccessorOptionsWithoutContext | undefined
-  ) => {
+  return async (request, accessorOptions) => {
     const preparedRequest = modestaPrepareRequest(
       request,
       accessorOptions,
@@ -551,7 +544,7 @@ export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSe
 
     const responseBody = await modestaReadFetchResponseBody(response);
 
-    return modestaProjectResponse<TResponse, TRequestBody>(request, {
+    return modestaProjectResponse(request, {
       body: responseBody,
       getHeader: (name) => response.headers.get(name),
     });

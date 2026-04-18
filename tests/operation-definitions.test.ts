@@ -657,15 +657,15 @@ describe('operation definition generation', () => {
   it('emits sender aliases without interface context types', () => {
     expect(generatedSource).toContain(
       [
-        'export type AccessorSenderWithoutContext = <TResponse, TRequestBody>(',
-        '  request: AccessorRequestDescriptor<TRequestBody>,',
+        'export type AccessorSenderWithoutContext = <TResponse>(',
+        '  request: AccessorRequestDescriptor,',
         '  options: AccessorOptionsWithoutContext | undefined) => Promise<TResponse>;',
       ].join('\n')
     );
     expect(generatedSource).toContain(
       [
-        'export type AccessorSenderWithContext<TAccessorContext> = <TResponse, TRequestBody>(',
-        '  request: AccessorRequestDescriptor<TRequestBody>,',
+        'export type AccessorSenderWithContext<TAccessorContext> = <TResponse>(',
+        '  request: AccessorRequestDescriptor,',
         '  options: AccessorOptionsWithContext<TAccessorContext>) => Promise<TResponse>;',
       ].join('\n')
     );
@@ -684,10 +684,11 @@ describe('operation definition generation', () => {
         '  create_CreateItem_accessor,',
         '  create_DeleteItem_accessor,',
         '  createFetchSender,',
+        '  modestaProjectResponse,',
         "} from './generated.ts';",
         '',
-        'const sender: AccessorSenderWithoutContext = async <TResponse, TRequestBody>(',
-        '  _request: AccessorRequestDescriptor<TRequestBody>,',
+        'const sender: AccessorSenderWithoutContext = async <TResponse>(',
+        '  _request: AccessorRequestDescriptor,',
         '  _options: AccessorOptionsWithoutContext | undefined',
         "): Promise<TResponse> => 'ok' as unknown as TResponse;",
         '',
@@ -696,8 +697,15 @@ describe('operation definition generation', () => {
         '// @ts-expect-error accessor factories no longer accept interface context arguments',
         "create_DeleteItem_accessor(sender, 'trace-42');",
         '',
-        'const senderWithContext: AccessorSenderWithContext<{ requestId: string }> = async <TResponse, TRequestBody>(',
-        '  _request: AccessorRequestDescriptor<TRequestBody>,',
+        'const senderFromLambda: AccessorSenderWithoutContext = async (request, _options) =>',
+        '  modestaProjectResponse(request, {',
+        "    body: 'ok',",
+        '    getHeader: () => null,',
+        '  });',
+        'create_DeleteItem_accessor(senderFromLambda);',
+        '',
+        'const senderWithContext: AccessorSenderWithContext<{ requestId: string }> = async <TResponse>(',
+        '  _request: AccessorRequestDescriptor,',
         '  options: AccessorOptionsWithContext<{ requestId: string }>',
         '): Promise<TResponse> => options.context as unknown as TResponse;',
         '',

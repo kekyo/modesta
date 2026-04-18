@@ -61,31 +61,25 @@ export interface AccessorOptionsWithContext<TAccessorContext>
  * Sender function used by generated accessors that do not require per-call context values.
  * @typeParam TResponse Response payload type.
  * @typeParam TRequestBody Request body payload type.
- * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.
  * @param request Prepared request descriptor.
- * @param interfaceContext Context value bound when creating the accessor implementation.
  * @param options Additional accessor call options without per-call context.
  * @returns Promise that resolves to the typed response payload.
  */
-export type AccessorSenderWithoutContext<TAccessorInterfaceContext> = <TResponse, TRequestBody>(
+export type AccessorSenderWithoutContext = <TResponse, TRequestBody>(
   request: AccessorRequestDescriptor<TRequestBody>,
-  interfaceContext: TAccessorInterfaceContext | undefined,
   options: AccessorOptionsWithoutContext | undefined) => Promise<TResponse>;
 
 /**
  * Sender function used by generated accessors that require per-call context values.
  * @typeParam TResponse Response payload type.
  * @typeParam TRequestBody Request body payload type.
- * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.
  * @typeParam TAccessorContext Per-call context value type passed to the sender.
  * @param request Prepared request descriptor.
- * @param interfaceContext Context value bound when creating the accessor implementation.
  * @param options Additional accessor call options with per-call context.
  * @returns Promise that resolves to the typed response payload.
  */
-export type AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext> = <TResponse, TRequestBody>(
+export type AccessorSenderWithContext<TAccessorContext> = <TResponse, TRequestBody>(
   request: AccessorRequestDescriptor<TRequestBody>,
-  interfaceContext: TAccessorInterfaceContext | undefined,
   options: AccessorOptionsWithContext<TAccessorContext>) => Promise<TResponse>;
 
 /** Options that configure the fetch-based sender. */
@@ -98,6 +92,42 @@ export interface CreateFetchSenderOptions {
   readonly headers?: Record<string, string> | undefined;
   /** Additional RequestInit values merged into every request. Generated accessors continue to control body, headers, method, and signal. */
   readonly init?: Omit<RequestInit, 'body' | 'headers' | 'method' | 'signal'> | undefined;
+}
+
+/**
+ * Options that configure request preparation for custom sender implementations.
+ */
+export interface ModestaPrepareRequestOptions {
+  /** Base URL used to resolve generated accessor request URLs. */
+  readonly baseUrl: string | URL;
+  /** Default headers merged with per-request headers. */
+  readonly headers?: Record<string, string> | undefined;
+}
+
+/**
+ * Transport-neutral request values prepared for a sender implementation.
+ */
+export interface ModestaPreparedRequest {
+  /** Absolute request URL resolved against the configured base URL. */
+  readonly url: URL;
+  /** HTTP method sent to the endpoint. */
+  readonly method: string;
+  /** Merged request headers, or undefined when no headers are present. */
+  readonly headers: Record<string, string> | undefined;
+  /** Original request body payload before transport-specific serialization. */
+  readonly body: unknown;
+  /** Abort signal forwarded from the accessor call options. */
+  readonly signal: AbortSignal | undefined;
+}
+
+/**
+ * Transport response values supplied to response projection helpers.
+ */
+export interface ModestaResponseSource {
+  /** Function that reads a response header value by its wire name. */
+  readonly getHeader: (name: string) => string | null | undefined;
+  /** Parsed or transport-native response body value. */
+  readonly body: unknown;
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -200,6 +230,26 @@ const modestaHasOwnProperties = (value: object) => {
     }
   }
   return false;
+};
+
+const modestaMergeRequestHeaders = (
+  defaultHeaders: Record<string, string> | undefined,
+  requestHeaders: Record<string, string>
+) => {
+  const hasDefaultHeaders =
+    !!defaultHeaders && modestaHasOwnProperties(defaultHeaders);
+  const hasRequestHeaders = modestaHasOwnProperties(requestHeaders);
+
+  if (hasDefaultHeaders) {
+    return hasRequestHeaders
+      ? {
+          ...defaultHeaders,
+          ...requestHeaders,
+        }
+      : defaultHeaders;
+  }
+
+  return hasRequestHeaders ? requestHeaders : undefined;
 };
 
 const modestaAssignProperties = (
@@ -307,7 +357,7 @@ const modestaParseResponseHeaderValue = (
 };
 
 const modestaReadResponseHeaders = (
-  response: Response,
+  getHeader: (name: string) => string | null | undefined,
   descriptors: readonly AccessorResponseHeaderDescriptor[]
 ) => {
   if (descriptors.length === 0) {
@@ -316,7 +366,7 @@ const modestaReadResponseHeaders = (
 
   let projectedHeaders: Record<string, unknown> | undefined;
   for (const descriptor of descriptors) {
-    const headerValue = response.headers.get(descriptor.name);
+    const headerValue = getHeader(descriptor.name);
     if (headerValue == null) {
       continue;
     }
@@ -329,7 +379,7 @@ const modestaReadResponseHeaders = (
   return projectedHeaders;
 };
 
-const modestaProjectResponse = (
+const modestaComposeResponse = (
   body: unknown,
   projectedHeaders: Record<string, unknown> | undefined,
   wrapResponseBody: boolean
@@ -360,7 +410,64 @@ const modestaProjectResponse = (
   );
 };
 
-const modestaReadResponseBody = (response: Response) => {
+/**
+ * Prepares transport-neutral request values for a sender implementation.
+ * @typeParam TRequestBody Request body payload type.
+ * @param request Prepared request descriptor emitted by the generated accessor.
+ * @param accessorOptions Additional accessor call options passed to the sender.
+ * @param options Options that configure request preparation.
+ * @returns Request values resolved against the configured base URL.
+ * @remarks The returned `body` is not serialized. Use `modestaSerializeRequestBody()` when a transport expects a serialized payload.
+ */
+export const modestaPrepareRequest = <TRequestBody>(
+  request: AccessorRequestDescriptor<TRequestBody>,
+  accessorOptions: AccessorOptions | undefined,
+  options: ModestaPrepareRequestOptions
+): ModestaPreparedRequest => ({
+  url: new URL(request.url, options.baseUrl),
+  method: request.method,
+  headers: modestaMergeRequestHeaders(options.headers, request.headers),
+  body: request.body,
+  signal: accessorOptions?.signal,
+});
+
+/**
+ * Serializes a request body using the accessor request content type.
+ * @typeParam TRequestBody Request body payload type.
+ * @param request Prepared request descriptor emitted by the generated accessor.
+ * @returns Serialized body value for fetch-style transports, or undefined when the request has no body.
+ * @remarks JSON media types are stringified. Other body values are returned as-is.
+ */
+export const modestaSerializeRequestBody = <TRequestBody>(
+  request: AccessorRequestDescriptor<TRequestBody>
+) => modestaSerializeFetchBody(request.body, request.headers['content-type']);
+
+/**
+ * Projects a transport response into the generated accessor response shape.
+ * @typeParam TResponse Response payload type.
+ * @typeParam TRequestBody Request body payload type.
+ * @param request Prepared request descriptor emitted by the generated accessor.
+ * @param response Transport response values used to project response headers and body.
+ * @returns Response value that matches the generated accessor contract.
+ * @remarks Response headers defined by the accessor are parsed and merged into the returned body shape.
+ */
+export const modestaProjectResponse = <TResponse, TRequestBody>(
+  request: AccessorRequestDescriptor<TRequestBody>,
+  response: ModestaResponseSource
+) =>
+  modestaComposeResponse(
+    response.body,
+    modestaReadResponseHeaders(response.getHeader, request.responseHeaders),
+    request.wrapResponseBody
+  ) as TResponse;
+
+/**
+ * Reads a response body from a fetch-compatible response object.
+ * @param response Fetch-compatible response object.
+ * @returns Parsed response body value, or undefined for empty responses.
+ * @remarks JSON media types are parsed with `response.json()`. Other bodies are read with `response.text()`.
+ */
+export const modestaReadFetchResponseBody = (response: Response) => {
   if (
     response.status === 204 ||
     response.status === 205 ||
@@ -388,12 +495,10 @@ const modestaReadResponseBody = (response: Response) => {
  * @param options Options that configure the fetch-based sender.
  * @returns Sender implementation that executes requests via the fetch API.
  * @remarks When `options.fetch` is omitted, `globalThis.fetch` must be available.
- * Accessor interface context values are ignored by this sender implementation.
+ * Per-call context values are not accepted by this sender implementation.
  */
-export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSenderWithoutContext<undefined> => {
+export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSenderWithoutContext => {
   const fetchImplementation = options.fetch ?? globalThis.fetch;
-  const hasDefaultHeaders =
-    options.headers && modestaHasOwnProperties(options.headers);
   if (typeof fetchImplementation !== 'function') {
     throw new Error(
       'Fetch implementation is not available. Pass CreateFetchSenderOptions.fetch explicitly.'
@@ -402,48 +507,35 @@ export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSe
 
   return async <TResponse, TRequestBody>(
     request: AccessorRequestDescriptor<TRequestBody>,
-    _interfaceContext: undefined,
     accessorOptions: AccessorOptionsWithoutContext | undefined
   ) => {
-    const requestHeaders =
-      modestaHasOwnProperties(request.headers) ? request.headers : undefined;
-    const headers =
-      hasDefaultHeaders === false
-        ? requestHeaders
-        : requestHeaders
-          ? {
-              ...options.headers,
-              ...requestHeaders,
-            }
-          : options.headers;
-    const body = modestaSerializeFetchBody(
-      request.body,
-      request.headers['content-type']
+    const preparedRequest = modestaPrepareRequest(
+      request,
+      accessorOptions,
+      options
     );
+    const body = modestaSerializeRequestBody(request);
     const requestInit: RequestInit =
       options.init
         ? {
             ...options.init,
-            method: request.method,
+            method: preparedRequest.method,
           }
         : {
-            method: request.method,
+            method: preparedRequest.method,
           };
 
-    if (headers) {
-      requestInit.headers = headers;
+    if (preparedRequest.headers) {
+      requestInit.headers = preparedRequest.headers;
     }
     if (body !== undefined) {
-      requestInit.body = body;
+      requestInit.body = body as RequestInit['body'];
     }
-    if (accessorOptions?.signal) {
-      requestInit.signal = accessorOptions.signal;
+    if (preparedRequest.signal) {
+      requestInit.signal = preparedRequest.signal;
     }
 
-    const response = await fetchImplementation(
-      new URL(request.url, options.baseUrl),
-      requestInit
-    );
+    const response = await fetchImplementation(preparedRequest.url, requestInit);
 
     if (response.ok === false) {
       const responseText = await response.text();
@@ -457,17 +549,12 @@ export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSe
       );
     }
 
-    const projectedHeaders = modestaReadResponseHeaders(
-      response,
-      request.responseHeaders
-    );
-    const responseBody = await modestaReadResponseBody(response);
+    const responseBody = await modestaReadFetchResponseBody(response);
 
-    return modestaProjectResponse(
-      responseBody,
-      projectedHeaders,
-      request.wrapResponseBody
-    ) as TResponse;
+    return modestaProjectResponse<TResponse, TRequestBody>(request, {
+      body: responseBody,
+      getHeader: (name) => response.headers.get(name),
+    });
   };
 };
 

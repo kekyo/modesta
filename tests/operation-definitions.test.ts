@@ -6,6 +6,7 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   generateAccessorSourceFromProject,
+  getTypeScriptDiagnostics,
   SwaggerFixtureProject,
   transpileGeneratedSource,
 } from './support/harness';
@@ -374,21 +375,12 @@ describe('operation definition generation', () => {
     );
     expect(generatedSource).toContain(
       [
-        'export function create_GetRouteValue_accessor(sender: AccessorSenderWithoutContext<undefined>): GetRouteValue;',
-        'export function create_GetRouteValue_accessor<TAccessorInterfaceContext>(',
-        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext>,',
-        '  interfaceContext: TAccessorInterfaceContext',
-        '): GetRouteValue;',
+        'export function create_GetRouteValue_accessor(sender: AccessorSenderWithoutContext): GetRouteValue;',
         'export function create_GetRouteValue_accessor<TAccessorContext>(',
-        '  sender: AccessorSenderWithContext<undefined, TAccessorContext>',
+        '  sender: AccessorSenderWithContext<TAccessorContext>',
         '): GetRouteValue_with_context<TAccessorContext>;',
-        'export function create_GetRouteValue_accessor<TAccessorInterfaceContext, TAccessorContext>(',
-        '  sender: AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
-        '  interfaceContext: TAccessorInterfaceContext',
-        '): GetRouteValue_with_context<TAccessorContext>;',
-        'export function create_GetRouteValue_accessor<TAccessorInterfaceContext, TAccessorContext>(',
-        '  sender: AccessorSenderWithoutContext<TAccessorInterfaceContext> | AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext>,',
-        '  interfaceContext?: TAccessorInterfaceContext',
+        'export function create_GetRouteValue_accessor<TAccessorContext>(',
+        '  sender: AccessorSenderWithoutContext | AccessorSenderWithContext<TAccessorContext>',
         '): GetRouteValue | GetRouteValue_with_context<TAccessorContext> {',
       ].join('\n')
     );
@@ -431,7 +423,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       { signal }
     );
   });
@@ -456,19 +447,15 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
 
   it('builds sender descriptors for operations without arguments', async () => {
-    const sender = vi.fn(
-      async (request: unknown, context: unknown, options: unknown) => ({
-        request,
-        context,
-        options,
-      })
-    );
+    const sender = vi.fn(async (request: unknown, options: unknown) => ({
+      request,
+      options,
+    }));
     const accessor = generatedModule.create_ListItems_accessor(sender);
     const signal = new AbortController().signal;
 
@@ -486,7 +473,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       { signal }
     );
   });
@@ -512,7 +498,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -540,7 +525,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -568,17 +552,16 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
 
   it('passes per-call context values to sender calls when requested by the sender type', async () => {
     const signal = new AbortController().signal;
-    const sender = vi.fn(async (request: unknown) => request);
-    const accessor = generatedModule.create_CreateItem_accessor(sender, {
-      traceId: 'trace-42',
-    });
+    const sender = vi.fn(
+      async (_request: unknown, options: unknown) => options
+    );
+    const accessor = generatedModule.create_CreateItem_accessor(sender);
 
     await accessor.post(
       {
@@ -606,9 +589,6 @@ describe('operation definition generation', () => {
         },
         responseHeaders: [],
         wrapResponseBody: false,
-      },
-      {
-        traceId: 'trace-42',
       },
       {
         context: {
@@ -646,18 +626,15 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
 
-  it('passes bound context values to sender calls', async () => {
+  it('does not pass interface context values to sender calls', async () => {
     const sender = vi.fn(
-      async (_request: unknown, context: unknown) => context
+      async (_request: unknown, options: unknown) => options
     );
-    const accessor = generatedModule.create_DeleteItem_accessor(sender, {
-      traceId: 'trace-42',
-    });
+    const accessor = generatedModule.create_DeleteItem_accessor(sender);
 
     await accessor._delete({
       id: '42',
@@ -673,11 +650,238 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      {
-        traceId: 'trace-42',
-      },
       undefined
     );
+  });
+
+  it('emits sender aliases without interface context types', () => {
+    expect(generatedSource).toContain(
+      [
+        'export type AccessorSenderWithoutContext = <TResponse, TRequestBody>(',
+        '  request: AccessorRequestDescriptor<TRequestBody>,',
+        '  options: AccessorOptionsWithoutContext | undefined) => Promise<TResponse>;',
+      ].join('\n')
+    );
+    expect(generatedSource).toContain(
+      [
+        'export type AccessorSenderWithContext<TAccessorContext> = <TResponse, TRequestBody>(',
+        '  request: AccessorRequestDescriptor<TRequestBody>,',
+        '  options: AccessorOptionsWithContext<TAccessorContext>) => Promise<TResponse>;',
+      ].join('\n')
+    );
+  });
+
+  it('type-checks sender and per-call context requirements for generated accessors', async () => {
+    const diagnostics = await getTypeScriptDiagnostics({
+      'generated.ts': generatedSource,
+      'consumer.ts': [
+        'import {',
+        '  AccessorOptionsWithContext,',
+        '  AccessorOptionsWithoutContext,',
+        '  AccessorRequestDescriptor,',
+        '  AccessorSenderWithoutContext,',
+        '  AccessorSenderWithContext,',
+        '  create_CreateItem_accessor,',
+        '  create_DeleteItem_accessor,',
+        '  createFetchSender,',
+        "} from './generated.ts';",
+        '',
+        'const sender: AccessorSenderWithoutContext = async <TResponse, TRequestBody>(',
+        '  _request: AccessorRequestDescriptor<TRequestBody>,',
+        '  _options: AccessorOptionsWithoutContext | undefined',
+        "): Promise<TResponse> => 'ok' as unknown as TResponse;",
+        '',
+        'const deleteAccessor = create_DeleteItem_accessor(sender);',
+        "deleteAccessor._delete({ id: '42' });",
+        '// @ts-expect-error accessor factories no longer accept interface context arguments',
+        "create_DeleteItem_accessor(sender, 'trace-42');",
+        '',
+        'const senderWithContext: AccessorSenderWithContext<{ requestId: string }> = async <TResponse, TRequestBody>(',
+        '  _request: AccessorRequestDescriptor<TRequestBody>,',
+        '  options: AccessorOptionsWithContext<{ requestId: string }>',
+        '): Promise<TResponse> => options.context as unknown as TResponse;',
+        '',
+        'const createAccessor = create_CreateItem_accessor(senderWithContext);',
+        "createAccessor.post({ name: 'alpha' }, { context: { requestId: 'request-99' } });",
+        '// @ts-expect-error per-call context is required for senders with context',
+        "createAccessor.post({ name: 'alpha' });",
+        '// @ts-expect-error accessor factories no longer accept interface context arguments',
+        "create_CreateItem_accessor(senderWithContext, 'trace-42');",
+        '',
+        "const fetchSender = createFetchSender({ baseUrl: 'https://example.com/' });",
+        'create_DeleteItem_accessor(fetchSender);',
+        '// @ts-expect-error accessor factories no longer accept interface context arguments',
+        "create_DeleteItem_accessor(fetchSender, 'trace-42');",
+        '',
+      ].join('\n'),
+    });
+
+    expect(diagnostics).toEqual([]);
+  });
+
+  it('provides public helpers for custom sender request preparation', () => {
+    const signal = new AbortController().signal;
+    const requestBody = {
+      name: 'alpha',
+    };
+    const request = {
+      operationName: 'CreateItem.post',
+      method: 'POST',
+      url: '/body',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: requestBody,
+      responseHeaders: [],
+      wrapResponseBody: false,
+    };
+
+    expect(
+      generatedModule.modestaPrepareRequest(
+        request,
+        { signal },
+        {
+          baseUrl: 'https://api.example.com',
+          headers: {
+            authorization: 'Bearer token',
+          },
+        }
+      )
+    ).toEqual({
+      url: new URL('https://api.example.com/body'),
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer token',
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: requestBody,
+      signal,
+    });
+    expect(generatedModule.modestaSerializeRequestBody(request)).toBe(
+      JSON.stringify(requestBody)
+    );
+    expect(
+      generatedModule.modestaPrepareRequest(
+        {
+          ...request,
+          headers: {},
+          body: undefined,
+        },
+        undefined,
+        {
+          baseUrl: 'https://api.example.com',
+        }
+      )
+    ).toEqual({
+      url: new URL('https://api.example.com/body'),
+      method: 'POST',
+      headers: undefined,
+      body: undefined,
+      signal: undefined,
+    });
+  });
+
+  it('provides public helpers for custom sender response projection', () => {
+    const responseBody = {
+      value: 'alpha',
+    };
+    const projectedObjectResponse = generatedModule.modestaProjectResponse(
+      {
+        operationName: 'GetDocument.get',
+        method: 'GET',
+        url: '/document',
+        headers: {
+          accept: 'application/json',
+        },
+        body: undefined,
+        responseHeaders: [
+          {
+            name: 'etag',
+            propertyName: 'etag',
+            valueType: 'string',
+          },
+        ],
+        wrapResponseBody: false,
+      },
+      {
+        body: responseBody,
+        getHeader: (name: string) => (name === 'etag' ? 'etag-42' : null),
+      }
+    );
+
+    expect(projectedObjectResponse).toBe(responseBody);
+    expect(projectedObjectResponse).toEqual({
+      value: 'alpha',
+      etag: 'etag-42',
+    });
+
+    expect(
+      generatedModule.modestaProjectResponse(
+        {
+          operationName: 'GetRateLimits.get',
+          method: 'GET',
+          url: '/rate-limits',
+          headers: {},
+          body: undefined,
+          responseHeaders: [
+            {
+              name: 'x-rate-limit-history',
+              propertyName: 'xRateLimitHistory',
+              valueType: 'array',
+              itemValueType: 'number',
+            },
+          ],
+          wrapResponseBody: true,
+        },
+        {
+          body: [1, 2, 3],
+          getHeader: (name: string) =>
+            name === 'x-rate-limit-history' ? '7, 5, 3' : null,
+        }
+      )
+    ).toEqual({
+      body: [1, 2, 3],
+      xRateLimitHistory: [7, 5, 3],
+    });
+  });
+
+  it('provides a public fetch response body reader helper', async () => {
+    const json = vi.fn(async () => ({
+      id: '42',
+      source: 'helper',
+    }));
+    const text = vi.fn(async () => 'unused');
+
+    await expect(
+      generatedModule.modestaReadFetchResponseBody({
+        status: 200,
+        headers: {
+          get: (name: string) =>
+            name === 'content-type' ? 'application/json' : null,
+        },
+        json,
+        text,
+      })
+    ).resolves.toEqual({
+      id: '42',
+      source: 'helper',
+    });
+    expect(json).toHaveBeenCalledTimes(1);
+    expect(text).not.toHaveBeenCalled();
+
+    const emptyText = vi.fn(async () => 'ignored');
+    await expect(
+      generatedModule.modestaReadFetchResponseBody({
+        status: 204,
+        headers: {
+          get: () => null,
+        },
+        text: emptyText,
+      })
+    ).resolves.toBeUndefined();
+    expect(emptyText).not.toHaveBeenCalled();
   });
 
   it('provides a fetch-based sender helper', async () => {
@@ -863,7 +1067,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -910,7 +1113,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -952,7 +1154,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -1013,7 +1214,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -1052,7 +1252,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -1090,7 +1289,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -1139,7 +1337,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -1178,7 +1375,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });
@@ -1249,7 +1445,6 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
-      undefined,
       undefined
     );
   });

@@ -355,3 +355,50 @@ export const transpileGeneratedSource = async (source: string) => {
   await rm(moduleDirectory, { force: true, recursive: true });
   return imported;
 };
+
+const formatTypeScriptDiagnostic = (diagnostic: ts.Diagnostic) => {
+  const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
+  if (diagnostic.file == null || diagnostic.start == null) {
+    return message;
+  }
+
+  const location = diagnostic.file.getLineAndCharacterOfPosition(
+    diagnostic.start
+  );
+  return `${diagnostic.file.fileName}:${location.line + 1}:${location.character + 1} ${message}`;
+};
+
+export const getTypeScriptDiagnostics = async (
+  files: Record<string, string>
+) => {
+  const rootDirectory = await mkdtemp(join(tmpdir(), 'modesta-typescript-'));
+  try {
+    const rootNames: string[] = [];
+    for (const [relativePath, content] of Object.entries(files)) {
+      const absolutePath = join(rootDirectory, relativePath);
+      await mkdir(dirname(absolutePath), { recursive: true });
+      await writeFile(absolutePath, content, 'utf8');
+      rootNames.push(absolutePath);
+    }
+
+    const compilerOptions: ts.CompilerOptions = {
+      allowImportingTsExtensions: true,
+      allowSyntheticDefaultImports: true,
+      esModuleInterop: true,
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+      noEmit: true,
+      skipLibCheck: true,
+      strict: true,
+      target: ts.ScriptTarget.ES2022,
+      types: ['node'],
+    };
+    const program = ts.createProgram(rootNames, compilerOptions);
+
+    return ts
+      .getPreEmitDiagnostics(program)
+      .map((diagnostic) => formatTypeScriptDiagnostic(diagnostic));
+  } finally {
+    await rm(rootDirectory, { force: true, recursive: true });
+  }
+};

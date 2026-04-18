@@ -137,6 +137,8 @@ const loadRemoteText = async (
   };
 };
 
+//////////////////////////////////////////////////////////////////////////
+
 /**
  * Loads and parses an OpenAPI document from a file path or URL.
  * @param options Options that specify which OpenAPI document source to read.

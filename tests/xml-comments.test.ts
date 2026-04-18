@@ -267,6 +267,18 @@ describe('xml comments integration', () => {
       generatedSource,
       'CreateFetchSenderOptions'
     );
+    const modestaPrepareRequestOptionsBlock = getInterfaceBlock(
+      generatedSource,
+      'ModestaPrepareRequestOptions'
+    );
+    const modestaPreparedRequestBlock = getInterfaceBlock(
+      generatedSource,
+      'ModestaPreparedRequest'
+    );
+    const modestaResponseSourceBlock = getInterfaceBlock(
+      generatedSource,
+      'ModestaResponseSource'
+    );
 
     expect(
       getInterfaceDocumentation(generatedSource, 'AccessorRequestDescriptor')
@@ -357,9 +369,7 @@ describe('xml comments integration', () => {
         ' * Sender function used by generated accessors that do not require per-call context values.',
         ' * @typeParam TResponse Response payload type.',
         ' * @typeParam TRequestBody Request body payload type.',
-        ' * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.',
         ' * @param request Prepared request descriptor.',
-        ' * @param interfaceContext Context value bound when creating the accessor implementation.',
         ' * @param options Additional accessor call options without per-call context.',
         ' * @returns Promise that resolves to the typed response payload.',
         ' */',
@@ -373,10 +383,8 @@ describe('xml comments integration', () => {
         ' * Sender function used by generated accessors that require per-call context values.',
         ' * @typeParam TResponse Response payload type.',
         ' * @typeParam TRequestBody Request body payload type.',
-        ' * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.',
         ' * @typeParam TAccessorContext Per-call context value type passed to the sender.',
         ' * @param request Prepared request descriptor.',
-        ' * @param interfaceContext Context value bound when creating the accessor implementation.',
         ' * @param options Additional accessor call options with per-call context.',
         ' * @returns Promise that resolves to the typed response payload.',
         ' */',
@@ -409,6 +417,78 @@ describe('xml comments integration', () => {
       'init',
       '/** Additional RequestInit values merged into every request. Generated accessors continue to control body, headers, method, and signal. */'
     );
+    expect(
+      getInterfaceDocumentation(generatedSource, 'ModestaPrepareRequestOptions')
+    ).toBe(
+      [
+        '/**',
+        ' * Options that configure request preparation for custom sender implementations.',
+        ' */',
+      ].join('\n')
+    );
+    expectMemberDocumentation(
+      modestaPrepareRequestOptionsBlock,
+      'baseUrl',
+      '/** Base URL used to resolve generated accessor request URLs. */'
+    );
+    expectMemberDocumentation(
+      modestaPrepareRequestOptionsBlock,
+      'headers',
+      '/** Default headers merged with per-request headers. */'
+    );
+    expect(
+      getInterfaceDocumentation(generatedSource, 'ModestaPreparedRequest')
+    ).toBe(
+      [
+        '/**',
+        ' * Transport-neutral request values prepared for a sender implementation.',
+        ' */',
+      ].join('\n')
+    );
+    expectMemberDocumentation(
+      modestaPreparedRequestBlock,
+      'url',
+      '/** Absolute request URL resolved against the configured base URL. */'
+    );
+    expectMemberDocumentation(
+      modestaPreparedRequestBlock,
+      'method',
+      '/** HTTP method sent to the endpoint. */'
+    );
+    expectMemberDocumentation(
+      modestaPreparedRequestBlock,
+      'headers',
+      '/** Merged request headers, or undefined when no headers are present. */'
+    );
+    expectMemberDocumentation(
+      modestaPreparedRequestBlock,
+      'body',
+      '/** Original request body payload before transport-specific serialization. */'
+    );
+    expectMemberDocumentation(
+      modestaPreparedRequestBlock,
+      'signal',
+      '/** Abort signal forwarded from the accessor call options. */'
+    );
+    expect(
+      getInterfaceDocumentation(generatedSource, 'ModestaResponseSource')
+    ).toBe(
+      [
+        '/**',
+        ' * Transport response values supplied to response projection helpers.',
+        ' */',
+      ].join('\n')
+    );
+    expectMemberDocumentation(
+      modestaResponseSourceBlock,
+      'getHeader',
+      '/** Function that reads a response header value by its wire name. */'
+    );
+    expectMemberDocumentation(
+      modestaResponseSourceBlock,
+      'body',
+      '/** Parsed or transport-native response body value. */'
+    );
 
     expect(getConstDocumentation(generatedSource, 'createFetchSender')).toBe(
       [
@@ -417,7 +497,62 @@ describe('xml comments integration', () => {
         ' * @param options Options that configure the fetch-based sender.',
         ' * @returns Sender implementation that executes requests via the fetch API.',
         ' * @remarks When `options.fetch` is omitted, `globalThis.fetch` must be available.',
-        ' * Accessor interface context values are ignored by this sender implementation.',
+        ' * Per-call context values are not accepted by this sender implementation.',
+        ' */',
+      ].join('\n')
+    );
+    expect(
+      getConstDocumentation(generatedSource, 'modestaPrepareRequest')
+    ).toBe(
+      [
+        '/**',
+        ' * Prepares transport-neutral request values for a sender implementation.',
+        ' * @typeParam TRequestBody Request body payload type.',
+        ' * @param request Prepared request descriptor emitted by the generated accessor.',
+        ' * @param accessorOptions Additional accessor call options passed to the sender.',
+        ' * @param options Options that configure request preparation.',
+        ' * @returns Request values resolved against the configured base URL.',
+        ' * @remarks The returned `body` is not serialized. Use `modestaSerializeRequestBody()` when a transport expects a serialized payload.',
+        ' */',
+      ].join('\n')
+    );
+    expect(
+      getConstDocumentation(generatedSource, 'modestaSerializeRequestBody')
+    ).toBe(
+      [
+        '/**',
+        ' * Serializes a request body using the accessor request content type.',
+        ' * @typeParam TRequestBody Request body payload type.',
+        ' * @param request Prepared request descriptor emitted by the generated accessor.',
+        ' * @returns Serialized body value for fetch-style transports, or undefined when the request has no body.',
+        ' * @remarks JSON media types are stringified. Other body values are returned as-is.',
+        ' */',
+      ].join('\n')
+    );
+    expect(
+      getConstDocumentation(generatedSource, 'modestaProjectResponse')
+    ).toBe(
+      [
+        '/**',
+        ' * Projects a transport response into the generated accessor response shape.',
+        ' * @typeParam TResponse Response payload type.',
+        ' * @typeParam TRequestBody Request body payload type.',
+        ' * @param request Prepared request descriptor emitted by the generated accessor.',
+        ' * @param response Transport response values used to project response headers and body.',
+        ' * @returns Response value that matches the generated accessor contract.',
+        ' * @remarks Response headers defined by the accessor are parsed and merged into the returned body shape.',
+        ' */',
+      ].join('\n')
+    );
+    expect(
+      getConstDocumentation(generatedSource, 'modestaReadFetchResponseBody')
+    ).toBe(
+      [
+        '/**',
+        ' * Reads a response body from a fetch-compatible response object.',
+        ' * @param response Fetch-compatible response object.',
+        ' * @returns Parsed response body value, or undefined for empty responses.',
+        ' * @remarks JSON media types are parsed with `response.json()`. Other bodies are read with `response.text()`.',
         ' */',
       ].join('\n')
     );
@@ -427,12 +562,10 @@ describe('xml comments integration', () => {
       [
         '/**',
         ' * Creates a xml_comments accessor implementation.',
-        ' * @typeParam TAccessorInterfaceContext Accessor interface context value type passed to the sender.',
         ' * @typeParam TAccessorContext Per-call context value type passed to the sender.',
         ' * @param sender Sender implementation used to execute generated requests.',
-        ' * @param interfaceContext Context value passed to the sender for every accessor call. This may be ignored depending on the sender.',
         ' * @returns xml_comments accessor implementation bound to the provided sender.',
-        ' * @remarks The interfaceContext argument can be omitted when the sender accepts `undefined` as its interface context type. When the sender requires per-call context values, the returned accessor methods require `options.context` for each invocation.',
+        ' * @remarks When the sender requires per-call context values, the returned accessor methods require `options.context` for each invocation.',
         ' */',
       ].join('\n')
     );

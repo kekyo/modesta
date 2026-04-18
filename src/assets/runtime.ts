@@ -69,7 +69,7 @@ export interface AccessorOptionsWithContext<TAccessorContext>
  */
 export type AccessorSenderWithoutContext<TAccessorInterfaceContext> = <TResponse, TRequestBody>(
   request: AccessorRequestDescriptor<TRequestBody>,
-  interfaceContext: TAccessorInterfaceContext | undefined,
+  interfaceContext: TAccessorInterfaceContext,
   options: AccessorOptionsWithoutContext | undefined) => Promise<TResponse>;
 
 /**
@@ -85,7 +85,7 @@ export type AccessorSenderWithoutContext<TAccessorInterfaceContext> = <TResponse
  */
 export type AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext> = <TResponse, TRequestBody>(
   request: AccessorRequestDescriptor<TRequestBody>,
-  interfaceContext: TAccessorInterfaceContext | undefined,
+  interfaceContext: TAccessorInterfaceContext,
   options: AccessorOptionsWithContext<TAccessorContext>) => Promise<TResponse>;
 
 /** Options that configure the fetch-based sender. */

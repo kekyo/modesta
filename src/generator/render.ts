@@ -539,6 +539,9 @@ const renderAccessorFactory = (
   push(
     `): ${accessorGroup.interfaceName} | ${accessorWithContextInterfaceName}<TAccessorContext> {`
   );
+  push(
+    '  const modestaInterfaceContext = interfaceContext as TAccessorInterfaceContext;'
+  );
   push('  return {');
 
   for (const operation of accessorGroup.operations) {
@@ -604,7 +607,7 @@ const renderAccessorFactory = (
         operation.response
       )},`
     );
-    push('    }, interfaceContext, options),');
+    push('    }, modestaInterfaceContext, options),');
   }
 
   push(

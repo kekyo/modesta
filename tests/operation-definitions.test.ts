@@ -6,6 +6,7 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   generateAccessorSourceFromProject,
+  getTypeScriptDiagnostics,
   SwaggerFixtureProject,
   transpileGeneratedSource,
 } from './support/harness';
@@ -678,6 +679,74 @@ describe('operation definition generation', () => {
       },
       undefined
     );
+  });
+
+  it('emits sender aliases with exact interface context types', () => {
+    expect(generatedSource).toContain(
+      [
+        'export type AccessorSenderWithoutContext<TAccessorInterfaceContext> = <TResponse, TRequestBody>(',
+        '  request: AccessorRequestDescriptor<TRequestBody>,',
+        '  interfaceContext: TAccessorInterfaceContext,',
+        '  options: AccessorOptionsWithoutContext | undefined) => Promise<TResponse>;',
+      ].join('\n')
+    );
+    expect(generatedSource).toContain(
+      [
+        'export type AccessorSenderWithContext<TAccessorInterfaceContext, TAccessorContext> = <TResponse, TRequestBody>(',
+        '  request: AccessorRequestDescriptor<TRequestBody>,',
+        '  interfaceContext: TAccessorInterfaceContext,',
+        '  options: AccessorOptionsWithContext<TAccessorContext>) => Promise<TResponse>;',
+      ].join('\n')
+    );
+  });
+
+  it('type-checks interface context requirements for generated accessors', async () => {
+    const diagnostics = await getTypeScriptDiagnostics({
+      'generated.ts': generatedSource,
+      'consumer.ts': [
+        'import {',
+        '  AccessorOptionsWithContext,',
+        '  AccessorOptionsWithoutContext,',
+        '  AccessorRequestDescriptor,',
+        '  AccessorSenderWithoutContext,',
+        '  AccessorSenderWithContext,',
+        '  create_CreateItem_accessor,',
+        '  create_DeleteItem_accessor,',
+        '  createFetchSender,',
+        "} from './generated.ts';",
+        '',
+        'const sender: AccessorSenderWithoutContext<string> = async <TResponse, TRequestBody>(',
+        '  _request: AccessorRequestDescriptor<TRequestBody>,',
+        '  interfaceContext: string,',
+        '  _options: AccessorOptionsWithoutContext | undefined',
+        '): Promise<TResponse> => interfaceContext as unknown as TResponse;',
+        '',
+        '// @ts-expect-error interface context is required for non-undefined sender types',
+        'create_DeleteItem_accessor(sender);',
+        "create_DeleteItem_accessor(sender, 'trace-42');",
+        '',
+        'const senderWithContext: AccessorSenderWithContext<string, { requestId: string }> = async <TResponse, TRequestBody>(',
+        '  _request: AccessorRequestDescriptor<TRequestBody>,',
+        '  interfaceContext: string,',
+        '  options: AccessorOptionsWithContext<{ requestId: string }>',
+        '): Promise<TResponse> => ({',
+        '  interfaceContext,',
+        '  requestId: options.context.requestId,',
+        '}) as TResponse;',
+        '',
+        '// @ts-expect-error interface context is required for non-undefined sender types',
+        'create_CreateItem_accessor(senderWithContext);',
+        "create_CreateItem_accessor(senderWithContext, 'trace-42');",
+        '',
+        "const fetchSender = createFetchSender({ baseUrl: 'https://example.com/' });",
+        'create_DeleteItem_accessor(fetchSender);',
+        '// @ts-expect-error fetch sender only accepts undefined interface context',
+        "create_DeleteItem_accessor(fetchSender, 'trace-42');",
+        '',
+      ].join('\n'),
+    });
+
+    expect(diagnostics).toEqual([]);
   });
 
   it('provides a fetch-based sender helper', async () => {

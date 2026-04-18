@@ -267,7 +267,7 @@ const generatedFromRemote = await generateAccessorSourceFromFile({
 
 ## 生成コードの利用例
 
-生成コードには `AccessorRequestDescriptor`、`AccessorSenderWithoutContext`、`AccessorSenderWithContext`、`createFetchSender`、さらに各アクセサインターフェースとファクトリ関数が含まれます。
+生成コードには `AccessorRequestDescriptor`、`AccessorSenderWithoutContext`、`AccessorSenderWithContext`、`createFetchSender`、`modestaPrepareRequest`、`modestaSerializeRequestBody`、`modestaProjectResponse`、`modestaReadFetchResponseBody`、さらに各アクセサインターフェースとファクトリ関数が含まれます。
 
 ```typescript
 import {
@@ -307,31 +307,60 @@ const result = await summaries.get({
 modestaはAPI呼び出しの際に、out-of-band valueとなる「コンテキスト値」を渡すことが出来ます。
 生成される sender 型が直接扱うのは、アクセサ関数呼び出し毎に変化する `TAccessorContext` です。
 
-以下に例を示します:
+以下に、modesta の request 準備と response 合成ルールを維持したまま `axios` を使う例を示します:
 
 ```typescript
+import axios from 'axios';
 import {
   create_ListSummaries_accessor,
+  modestaPrepareRequest,
+  modestaProjectResponse,
   type AccessorSenderWithContext,
 } from './generated/accessors';
 
 // アクセサ関数呼び出し毎に渡す context value
 type Context = {
+  authToken: string;
+  baseUrl: string;
   requestId: string;
 };
 
 // 独自のトランスポート層を使うSenderファクトリを定義する
 const createTransportSender = (): AccessorSenderWithContext<Context> => {
   return async (request, accessorOptions) => {
-    const response = await myTransport(request.url, {
-      method: request.method,
-      headers: request.headers,
-      body: request.body,
-      requestId: accessorOptions.context.requestId, // Contextの値を参照
-      signal: accessorOptions.signal,
+    // リクエストの情報を収集する
+    const preparedRequest = modestaPrepareRequest(request, accessorOptions, {
+      baseUrl: accessorOptions.context.baseUrl,
+      headers: {
+        authorization: `Bearer ${accessorOptions.context.authToken}`,
+      },
     });
 
-    return response as unknown;
+    // axios: 呼び出しを実行する
+    const response = await axios.request({
+      url: preparedRequest.url.href,
+      method: preparedRequest.method,
+      headers: {
+        ...preparedRequest.headers,
+        'x-request-id': accessorOptions.context.requestId,
+      },
+      data: preparedRequest.body,
+      signal: preparedRequest.signal,
+    });
+
+    // 結果値を構築する
+    return modestaProjectResponse(request, {
+      body: response.data,
+      getHeader: (name) => {
+        const value = response.headers[name.toLowerCase()];
+        // axios: 値が配列の場合はカンマ区切りで連結し、それ以外は文字列とする
+        return Array.isArray(value)
+          ? value.join(', ')
+          : value == null
+            ? null
+            : String(value);
+      },
+    });
   };
 };
 
@@ -355,6 +384,9 @@ const result = await summaries.get(
   }
 );
 ```
+
+独自トランスポートがシリアライズ済み payload を要求する場合は、送信 body に `modestaSerializeRequestBody(request)` を使ってください。
+既に fetch 互換の `Response` を扱っている場合は、`modestaReadFetchResponseBody(response)` と `modestaProjectResponse()` を組み合わせられます。
 
 `createFetchSender()` は `AccessorSenderWithoutContext` を返すため、呼び出し毎のコンテキスト値は受け付けません。
 

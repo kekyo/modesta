@@ -271,7 +271,7 @@ const generatedFromRemote = await generateAccessorSourceFromFile({
 
 ## Generated Code Usage Example
 
-Generated code includes `AccessorRequestDescriptor`, `AccessorSenderWithoutContext`, `AccessorSenderWithContext`, `createFetchSender`, plus accessor interfaces and factory functions.
+Generated code includes `AccessorRequestDescriptor`, `AccessorSenderWithoutContext`, `AccessorSenderWithContext`, `createFetchSender`, `modestaPrepareRequest`, `modestaSerializeRequestBody`, `modestaProjectResponse`, `modestaReadFetchResponseBody`, plus accessor interfaces and factory functions.
 
 ```typescript
 import {
@@ -311,31 +311,61 @@ const result = await summaries.get({
 When making API calls, modesta allows you to pass a “context value” that serves as an out-of-band value.
 The generated `sender` type directly handles `TAccessorContext`, which changes with each call to an accessor function.
 
-Here is an example:
+Here is an example that uses `axios` while preserving modesta's request preparation and response projection rules:
 
 ```typescript
+import axios from 'axios';
 import {
   create_ListSummaries_accessor,
+  modestaPrepareRequest,
+  modestaProjectResponse,
   type AccessorSenderWithContext,
 } from './generated/accessors';
 
 // A context value passed for each accessor function call
 type Context = {
+  authToken: string;
+  baseUrl: string;
   requestId: string;
 };
 
 // Define a custom Sender factory
 const createTransportSender = (): AccessorSenderWithContext<Context> => {
   return async (request, accessorOptions) => {
-    const response = await myTransport(request.url, {
-      method: request.method,
-      headers: request.headers,
-      body: request.body,
-      requestId: accessorOptions.context.requestId, // Reads the per-call context value
-      signal: accessorOptions.signal,
+    // Collect request information.
+    const preparedRequest = modestaPrepareRequest(request, accessorOptions, {
+      baseUrl: accessorOptions.context.baseUrl,
+      headers: {
+        authorization: `Bearer ${accessorOptions.context.authToken}`,
+      },
     });
 
-    return response as unknown;
+    // axios: Invoke it.
+    const response = await axios.request({
+      url: preparedRequest.url.href,
+      method: preparedRequest.method,
+      headers: {
+        ...preparedRequest.headers,
+        'x-request-id': accessorOptions.context.requestId,
+      },
+      data: preparedRequest.body,
+      signal: preparedRequest.signal,
+    });
+
+    // Construct the result.
+    return modestaProjectResponse(request, {
+      body: response.data,
+      getHeader: (name) => {
+        const value = response.headers[name.toLowerCase()];
+        // axios: If the value is an array, concatenate the elements separated by commas;
+        // otherwise, treat it as a string.
+        return Array.isArray(value)
+          ? value.join(', ')
+          : value == null
+            ? null
+            : String(value);
+      },
+    });
   };
 };
 
@@ -359,6 +389,9 @@ const result = await summaries.get(
   }
 );
 ```
+
+If a custom transport expects a serialized payload, use `modestaSerializeRequestBody(request)` for the outgoing body.
+If you already have a fetch-compatible `Response`, `modestaReadFetchResponseBody(response)` can be combined with `modestaProjectResponse()`.
 
 `createFetchSender()` returns `AccessorSenderWithoutContext`, so per-call context values are not accepted.
 

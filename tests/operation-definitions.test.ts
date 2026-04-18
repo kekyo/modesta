@@ -719,6 +719,171 @@ describe('operation definition generation', () => {
     expect(diagnostics).toEqual([]);
   });
 
+  it('provides public helpers for custom sender request preparation', () => {
+    const signal = new AbortController().signal;
+    const requestBody = {
+      name: 'alpha',
+    };
+    const request = {
+      operationName: 'CreateItem.post',
+      method: 'POST',
+      url: '/body',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: requestBody,
+      responseHeaders: [],
+      wrapResponseBody: false,
+    };
+
+    expect(
+      generatedModule.modestaPrepareRequest(
+        request,
+        { signal },
+        {
+          baseUrl: 'https://api.example.com',
+          headers: {
+            authorization: 'Bearer token',
+          },
+        }
+      )
+    ).toEqual({
+      url: new URL('https://api.example.com/body'),
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer token',
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: requestBody,
+      signal,
+    });
+    expect(generatedModule.modestaSerializeRequestBody(request)).toBe(
+      JSON.stringify(requestBody)
+    );
+    expect(
+      generatedModule.modestaPrepareRequest(
+        {
+          ...request,
+          headers: {},
+          body: undefined,
+        },
+        undefined,
+        {
+          baseUrl: 'https://api.example.com',
+        }
+      )
+    ).toEqual({
+      url: new URL('https://api.example.com/body'),
+      method: 'POST',
+      headers: undefined,
+      body: undefined,
+      signal: undefined,
+    });
+  });
+
+  it('provides public helpers for custom sender response projection', () => {
+    const responseBody = {
+      value: 'alpha',
+    };
+    const projectedObjectResponse = generatedModule.modestaProjectResponse(
+      {
+        operationName: 'GetDocument.get',
+        method: 'GET',
+        url: '/document',
+        headers: {
+          accept: 'application/json',
+        },
+        body: undefined,
+        responseHeaders: [
+          {
+            name: 'etag',
+            propertyName: 'etag',
+            valueType: 'string',
+          },
+        ],
+        wrapResponseBody: false,
+      },
+      {
+        body: responseBody,
+        getHeader: (name: string) => (name === 'etag' ? 'etag-42' : null),
+      }
+    );
+
+    expect(projectedObjectResponse).toBe(responseBody);
+    expect(projectedObjectResponse).toEqual({
+      value: 'alpha',
+      etag: 'etag-42',
+    });
+
+    expect(
+      generatedModule.modestaProjectResponse(
+        {
+          operationName: 'GetRateLimits.get',
+          method: 'GET',
+          url: '/rate-limits',
+          headers: {},
+          body: undefined,
+          responseHeaders: [
+            {
+              name: 'x-rate-limit-history',
+              propertyName: 'xRateLimitHistory',
+              valueType: 'array',
+              itemValueType: 'number',
+            },
+          ],
+          wrapResponseBody: true,
+        },
+        {
+          body: [1, 2, 3],
+          getHeader: (name: string) =>
+            name === 'x-rate-limit-history' ? '7, 5, 3' : null,
+        }
+      )
+    ).toEqual({
+      body: [1, 2, 3],
+      xRateLimitHistory: [7, 5, 3],
+    });
+  });
+
+  it('provides a public fetch response body reader helper', async () => {
+    const json = vi.fn(async () => ({
+      id: '42',
+      source: 'helper',
+    }));
+    const text = vi.fn(async () => 'unused');
+
+    await expect(
+      generatedModule.modestaReadFetchResponseBody({
+        status: 200,
+        headers: {
+          get: (name: string) =>
+            name === 'content-type' ? 'application/json' : null,
+        },
+        json,
+        text,
+      })
+    ).resolves.toEqual({
+      id: '42',
+      source: 'helper',
+    });
+    expect(json).toHaveBeenCalledTimes(1);
+    expect(text).not.toHaveBeenCalled();
+
+    const emptyText = vi.fn(async () => 'ignored');
+    await expect(
+      generatedModule.modestaReadFetchResponseBody({
+        status: 204,
+        headers: {
+          get: () => null,
+        },
+        text: emptyText,
+      })
+    ).resolves.toBeUndefined();
+    expect(emptyText).not.toHaveBeenCalled();
+  });
+
   it('provides a fetch-based sender helper', async () => {
     const signal = new AbortController().signal;
     const json = vi.fn(async () => ({ id: '42', source: 'route' }));

@@ -160,19 +160,19 @@ describe('naming and grouping rules', () => {
     const usersBlock = getInterfaceBlock(pathGroupingSource, 'users');
 
     expect(xmlCommentsBlock).toContain(
-      'readonly get_documented: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ValueEnvelope>;'
+      'readonly get_documented: (options?: AccessorOptions | undefined) => Promise<ValueEnvelope>;'
     );
     expect(xmlCommentsBlock).toContain(
-      'readonly post_documented: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ValueEnvelope>;'
+      'readonly post_documented: (options?: AccessorOptions | undefined) => Promise<ValueEnvelope>;'
     );
     expect(xmlCommentsBlock).toContain(
-      'readonly get_returns_only: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ValueEnvelope>;'
+      'readonly get_returns_only: (options?: AccessorOptions | undefined) => Promise<ValueEnvelope>;'
     );
     expect(anotherBlock).toContain(
-      'readonly get_returns_only: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ValueEnvelope>;'
+      'readonly get_returns_only: (options?: AccessorOptions | undefined) => Promise<ValueEnvelope>;'
     );
     expect(usersBlock).toContain(
-      'readonly get_by_id: (args: users_get_by_id_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<ValueEnvelope>;'
+      'readonly get_by_id: (args: users_get_by_id_arguments, options?: AccessorOptions | undefined) => Promise<ValueEnvelope>;'
     );
 
     expect(pathGroupingSource).toContain(
@@ -222,13 +222,13 @@ describe('naming and grouping rules', () => {
     const hogeBlock = getInterfaceBlock(uniqueSuffixSource, 'hoge');
 
     expect(foobarXmlCommentsBlock).toContain(
-      'readonly get_documented: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ValueEnvelope>;'
+      'readonly get_documented: (options?: AccessorOptions | undefined) => Promise<ValueEnvelope>;'
     );
     expect(bazXmlCommentsBlock).toContain(
-      'readonly get_documented: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ValueEnvelope>;'
+      'readonly get_documented: (options?: AccessorOptions | undefined) => Promise<ValueEnvelope>;'
     );
     expect(hogeBlock).toContain(
-      'readonly get_documented: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ValueEnvelope>;'
+      'readonly get_documented: (options?: AccessorOptions | undefined) => Promise<ValueEnvelope>;'
     );
   });
 

@@ -149,10 +149,10 @@ describe('reference reuse generation', () => {
 
   it('uses shared schema references directly in operation response signatures', () => {
     expect(generatedSource).toContain(
-      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<UserCollection>;'
+      'readonly get: (options?: AccessorOptions | undefined) => Promise<UserCollection>;'
     );
     expect(generatedSource).toContain(
-      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<WrappedUser>;'
+      'readonly get: (options?: AccessorOptions | undefined) => Promise<WrappedUser>;'
     );
     expect(generatedSource).not.toContain('GetUsers_get_response');
     expect(generatedSource).not.toContain('GetWrappedUser_get_response');

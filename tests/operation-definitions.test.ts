@@ -310,7 +310,7 @@ describe('operation definition generation', () => {
 
   it('uses the shared body type directly when no flattened parameters are present', () => {
     expect(generatedSource).toContain(
-      'readonly post: (args: CreateItemRequest, options?: AccessorOptionsWithoutContext | undefined) => Promise<SimpleRecord>;'
+      'readonly post: (args: CreateItemRequest, options?: AccessorOptions | undefined) => Promise<SimpleRecord>;'
     );
     expect(generatedSource).not.toContain('CreateItem_post_arguments');
     expect(generatedSource).not.toContain('CreateItem_post_request_body');
@@ -326,20 +326,20 @@ describe('operation definition generation', () => {
     expect(argumentsBlock).toMatch(/pageSize\??: number;/);
     expect(argumentsBlock).toMatch(/xApiKey\??: string;/);
     expect(generatedSource).toContain(
-      'readonly post: (args: CreateItemRequest & CreateCombinedItem_post_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<SimpleRecord>;'
+      'readonly post: (args: CreateItemRequest & CreateCombinedItem_post_arguments, options?: AccessorOptions | undefined) => Promise<SimpleRecord>;'
     );
   });
 
   it('uses shared schema types directly for direct response definitions', () => {
     expect(generatedSource).toContain(
-      'readonly get: (args: GetRouteValue_get_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<SimpleRecord>;'
+      'readonly get: (args: GetRouteValue_get_arguments, options?: AccessorOptions | undefined) => Promise<SimpleRecord>;'
     );
     expect(generatedSource).not.toContain('GetRouteValue_get_response');
   });
 
   it('uses shared schema types directly for array return type definitions', () => {
     expect(generatedSource).toContain(
-      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ReadonlyArray<SimpleRecord>>;'
+      'readonly get: (options?: AccessorOptions | undefined) => Promise<ReadonlyArray<SimpleRecord>>;'
     );
     expect(generatedSource).not.toContain('ListItems_get_response');
   });
@@ -355,17 +355,17 @@ describe('operation definition generation', () => {
 
   it('uses void directly for empty responses', () => {
     expect(generatedSource).toContain(
-      '_delete: (args: DeleteItem_delete_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
+      '_delete: (args: DeleteItem_delete_arguments, options?: AccessorOptions | undefined) => Promise<void>;'
     );
     expect(generatedSource).not.toContain('DeleteItem_delete_response');
   });
 
   it('omits args from no-argument accessor signatures', () => {
     expect(generatedSource).toContain(
-      'get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ReadonlyArray<SimpleRecord>>;'
+      'get: (options?: AccessorOptions | undefined) => Promise<ReadonlyArray<SimpleRecord>>;'
     );
     expect(generatedSource).not.toContain(
-      'get: (args?: ListItems_get_arguments | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<ReadonlyArray<SimpleRecord>>;'
+      'get: (args?: ListItems_get_arguments | undefined, options?: AccessorOptions | undefined) => Promise<ReadonlyArray<SimpleRecord>>;'
     );
   });
 
@@ -389,7 +389,7 @@ describe('operation definition generation', () => {
   it('renders paired accessor interfaces for with and without per-call context', () => {
     expect(generatedSource).toContain('export interface DeleteItem {');
     expect(generatedSource).toContain(
-      'readonly _delete: (args: DeleteItem_delete_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
+      'readonly _delete: (args: DeleteItem_delete_arguments, options?: AccessorOptions | undefined) => Promise<void>;'
     );
     expect(generatedSource).toContain(
       'export interface DeleteItem_with_context<TAccessorContext> {'
@@ -659,7 +659,7 @@ describe('operation definition generation', () => {
       [
         'export type AccessorSender = <TResponse>(',
         '  request: AccessorRequestDescriptor,',
-        '  options: AccessorOptionsWithoutContext | undefined) => Promise<TResponse>;',
+        '  options: AccessorOptions | undefined) => Promise<TResponse>;',
       ].join('\n')
     );
     expect(generatedSource).toContain(
@@ -677,7 +677,7 @@ describe('operation definition generation', () => {
       'consumer.ts': [
         'import {',
         '  AccessorOptionsWithContext,',
-        '  AccessorOptionsWithoutContext,',
+        '  AccessorOptions,',
         '  AccessorRequestDescriptor,',
         '  AccessorSender,',
         '  AccessorSenderWithContext,',
@@ -689,7 +689,7 @@ describe('operation definition generation', () => {
         '',
         'const sender: AccessorSender = async <TResponse>(',
         '  _request: AccessorRequestDescriptor,',
-        '  _options: AccessorOptionsWithoutContext | undefined',
+        '  _options: AccessorOptions | undefined',
         "): Promise<TResponse> => 'ok' as unknown as TResponse;",
         '',
         'const deleteAccessor = create_DeleteItem_accessor(sender);',
@@ -1039,7 +1039,7 @@ describe('operation definition generation', () => {
     expect(argumentsBlock).toContain('header_id?: string;');
     expect(argumentsBlock).toContain("@remarks Duplicated argument name: 'id'");
     expect(edgeCaseGeneratedSource).toContain(
-      'readonly get: (args: GetDuplicateParameters_get_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<CollisionValueResponse>;'
+      'readonly get: (args: GetDuplicateParameters_get_arguments, options?: AccessorOptions | undefined) => Promise<CollisionValueResponse>;'
     );
 
     const warnings = getEdgeCaseWarnings('GetDuplicateParameters');
@@ -1179,7 +1179,7 @@ describe('operation definition generation', () => {
       "@remarks Duplicated argument name: 'xApiKey'"
     );
     expect(edgeCaseGeneratedSource).toContain(
-      'readonly post: (args: CreateCollisionItemRequest & CreateItem_post_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<CollisionValueResponse>;'
+      'readonly post: (args: CreateCollisionItemRequest & CreateItem_post_arguments, options?: AccessorOptions | undefined) => Promise<CollisionValueResponse>;'
     );
 
     const warnings = getEdgeCaseWarnings('CreateItem');
@@ -1237,7 +1237,7 @@ describe('operation definition generation', () => {
 
   it('uses primitive request bodies directly when no flattened parameters are present', async () => {
     expect(edgeCaseGeneratedSource).toContain(
-      'readonly post: (args: string, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
+      'readonly post: (args: string, options?: AccessorOptions | undefined) => Promise<void>;'
     );
     expect(edgeCaseGeneratedSource).not.toContain(
       'CreateText_post_request_envelope'
@@ -1271,7 +1271,7 @@ describe('operation definition generation', () => {
     );
     expect(requestEnvelopeBlock).toContain('readonly body: string;');
     expect(edgeCaseGeneratedSource).toContain(
-      'readonly post: (args: CreateScopedText_post_request_envelope & CreateScopedText_post_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
+      'readonly post: (args: CreateScopedText_post_request_envelope & CreateScopedText_post_arguments, options?: AccessorOptions | undefined) => Promise<void>;'
     );
 
     const sender = vi.fn(async (request: unknown) => request);
@@ -1303,7 +1303,7 @@ describe('operation definition generation', () => {
 
   it('uses array request bodies directly when no flattened parameters are present', async () => {
     expect(edgeCaseGeneratedSource).toContain(
-      'readonly post: (args: ReadonlyArray<number>, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
+      'readonly post: (args: ReadonlyArray<number>, options?: AccessorOptions | undefined) => Promise<void>;'
     );
     expect(edgeCaseGeneratedSource).not.toContain(
       'CreateNumberList_post_request_envelope'
@@ -1358,7 +1358,7 @@ describe('operation definition generation', () => {
       'readonly body: ReadonlyArray<number>;'
     );
     expect(edgeCaseGeneratedSource).toContain(
-      'readonly put: (args: UpdateNumbers_put_request_envelope & UpdateNumbers_put_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<void>;'
+      'readonly put: (args: UpdateNumbers_put_request_envelope & UpdateNumbers_put_arguments, options?: AccessorOptions | undefined) => Promise<void>;'
     );
 
     const sender = vi.fn(async (request: unknown) => request);
@@ -1407,7 +1407,7 @@ describe('operation definition generation', () => {
     );
     expect(responseHeadersBlock).toContain('xRequestId?: string;');
     expect(edgeCaseGeneratedSource).toContain(
-      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<GetToken_get_response_headers>;'
+      'readonly get: (options?: AccessorOptions | undefined) => Promise<GetToken_get_response_headers>;'
     );
 
     const sender = edgeCaseGeneratedModule.createFetchSender({
@@ -1459,7 +1459,7 @@ describe('operation definition generation', () => {
 
   it('returns primitive response bodies directly when response headers are absent', async () => {
     expect(edgeCaseGeneratedSource).toContain(
-      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<string>;'
+      'readonly get: (options?: AccessorOptions | undefined) => Promise<string>;'
     );
     expect(edgeCaseGeneratedSource).not.toContain(
       'GetPlainMessage_get_response_body'
@@ -1488,7 +1488,7 @@ describe('operation definition generation', () => {
 
   it('returns array response bodies directly when response headers are absent', async () => {
     expect(edgeCaseGeneratedSource).toContain(
-      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ReadonlyArray<number>>;'
+      'readonly get: (options?: AccessorOptions | undefined) => Promise<ReadonlyArray<number>>;'
     );
     expect(edgeCaseGeneratedSource).not.toContain(
       'GetNumbers_get_response_body'
@@ -1517,7 +1517,7 @@ describe('operation definition generation', () => {
 
   it('merges object response bodies with projected response headers', async () => {
     expect(edgeCaseGeneratedSource).toContain(
-      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentResponse & GetDocument_get_response_headers>;'
+      'readonly get: (options?: AccessorOptions | undefined) => Promise<DocumentResponse & GetDocument_get_response_headers>;'
     );
 
     const responseBody = { value: 'alpha' };
@@ -1557,7 +1557,7 @@ describe('operation definition generation', () => {
     );
     expect(responseEnvelopeBlock).toContain('readonly body: string;');
     expect(edgeCaseGeneratedSource).toContain(
-      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<GetMessage_get_response_body & GetMessage_get_response_headers>;'
+      'readonly get: (options?: AccessorOptions | undefined) => Promise<GetMessage_get_response_body & GetMessage_get_response_headers>;'
     );
 
     const sender = edgeCaseGeneratedModule.createFetchSender({
@@ -1589,7 +1589,7 @@ describe('operation definition generation', () => {
       'readonly body: ReadonlyArray<number>;'
     );
     expect(edgeCaseGeneratedSource).toContain(
-      'readonly get: (options?: AccessorOptionsWithoutContext | undefined) => Promise<GetNumberMessage_get_response_body & GetNumberMessage_get_response_headers>;'
+      'readonly get: (options?: AccessorOptions | undefined) => Promise<GetNumberMessage_get_response_body & GetNumberMessage_get_response_headers>;'
     );
 
     const sender = edgeCaseGeneratedModule.createFetchSender({

@@ -328,15 +328,10 @@ describe('xml comments integration', () => {
       'wrapResponseBody',
       '/** Indicates that primitive or array response bodies must be exposed through a `body` member when response headers are also defined. */'
     );
-    expect(getInterfaceDocumentation(generatedSource, 'AccessorOptions')).toBe(
-      '/** Shared options accepted by generated accessor methods. */'
-    );
     expect(
-      getInterfaceDocumentation(
-        generatedSource,
-        'AccessorOptionsWithoutContext'
-      )
-    ).toBe(
+      getInterfaceDocumentation(generatedSource, 'AccessorOptionsBase')
+    ).toBe('/** Shared options accepted by generated accessor methods. */');
+    expect(getInterfaceDocumentation(generatedSource, 'AccessorOptions')).toBe(
       '/** Additional options accepted by accessors that do not use per-call context values. */'
     );
     expect(
@@ -360,9 +355,7 @@ describe('xml comments integration', () => {
       ].join('\n')
     );
 
-    expect(
-      getTypeAliasDocumentation(generatedSource, 'AccessorSender')
-    ).toBe(
+    expect(getTypeAliasDocumentation(generatedSource, 'AccessorSender')).toBe(
       [
         '/**',
         ' * Sender function used by generated accessors that do not require per-call context values.',
@@ -582,7 +575,7 @@ describe('xml comments integration', () => {
     const accessorBlock = getInterfaceBlock(generatedSource, 'xml_comments');
 
     expect(accessorBlock).toContain(
-      'readonly post_documented: (args?: CreateDocumentedRequest | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentedEnvelope>;'
+      'readonly post_documented: (args?: CreateDocumentedRequest | undefined, options?: AccessorOptions | undefined) => Promise<DocumentedEnvelope>;'
     );
     expect(generatedSource).not.toContain(
       'xml_comments_post_documented_arguments'
@@ -596,13 +589,13 @@ describe('xml comments integration', () => {
     const accessorBlock = getInterfaceBlock(generatedSource, 'xml_comments');
 
     expect(accessorBlock).toContain(
-      'readonly get_documented: (args?: xml_comments_get_documented_arguments | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentedEnvelope>;'
+      'readonly get_documented: (args?: xml_comments_get_documented_arguments | undefined, options?: AccessorOptions | undefined) => Promise<DocumentedEnvelope>;'
     );
     expect(accessorBlock).toContain(
-      'readonly post_documented: (args?: CreateDocumentedRequest | undefined, options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentedEnvelope>;'
+      'readonly post_documented: (args?: CreateDocumentedRequest | undefined, options?: AccessorOptions | undefined) => Promise<DocumentedEnvelope>;'
     );
     expect(accessorBlock).toContain(
-      'readonly get_returns_only: (options?: AccessorOptionsWithoutContext | undefined) => Promise<DocumentedEnvelope>;'
+      'readonly get_returns_only: (options?: AccessorOptions | undefined) => Promise<DocumentedEnvelope>;'
     );
     expect(generatedSource).not.toContain(
       'xml_comments_get_documented_response'

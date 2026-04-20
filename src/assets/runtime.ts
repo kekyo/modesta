@@ -35,13 +35,13 @@ export interface AccessorResponseHeaderDescriptor {
 }
 
 /** Shared options accepted by generated accessor methods. */
-export interface AccessorOptions {
+export interface AccessorOptionsBase {
   /** Abort signal used to cancel the request. */
   readonly signal?: AbortSignal | undefined;
 }
 
 /** Additional options accepted by accessors that do not use per-call context values. */
-export interface AccessorOptionsWithoutContext extends AccessorOptions {
+export interface AccessorOptions extends AccessorOptionsBase {
   /** Per-call context values are not accepted by this accessor shape. */
   readonly context?: never;
 }
@@ -51,7 +51,7 @@ export interface AccessorOptionsWithoutContext extends AccessorOptions {
  * @typeParam TAccessorContext Per-call context value type passed to the sender.
  */
 export interface AccessorOptionsWithContext<TAccessorContext>
-  extends AccessorOptions {
+  extends AccessorOptionsBase {
   /** Context value passed to the sender for this accessor call. */
   readonly context: TAccessorContext;
 }
@@ -65,7 +65,7 @@ export interface AccessorOptionsWithContext<TAccessorContext>
  */
 export type AccessorSender = <TResponse>(
   request: AccessorRequestDescriptor,
-  options: AccessorOptionsWithoutContext | undefined) => Promise<TResponse>;
+  options: AccessorOptions | undefined) => Promise<TResponse>;
 
 /**
  * Sender function used by generated accessors that require per-call context values.

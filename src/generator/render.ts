@@ -336,7 +336,7 @@ const renderAccessorInterface = (
     );
     const optionsType = withContext
       ? 'AccessorOptionsWithContext<TAccessorContext>'
-      : 'AccessorOptionsWithoutContext';
+      : 'AccessorOptions';
     const optionsArgument = withContext
       ? `options: ${optionsType}`
       : `options?: ${optionsType} | undefined`;
@@ -515,7 +515,7 @@ const renderAccessorFactory = (
   push('  const modestaSender = sender as <TResponse>(');
   push('    request: AccessorRequestDescriptor,');
   push(
-    '    options: AccessorOptionsWithoutContext | AccessorOptionsWithContext<TAccessorContext> | undefined'
+    '    options: AccessorOptions | AccessorOptionsWithContext<TAccessorContext> | undefined'
   );
   push('  ) => Promise<TResponse>;');
   push('  return {');

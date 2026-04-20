@@ -103,7 +103,7 @@ export const runCommandAllowFailure = async (
   });
 };
 
-const allocatePort = async () => {
+export const allocatePort = async () => {
   const server = createServer();
   await new Promise<void>((resolveListen, rejectListen) => {
     server.once('error', rejectListen);
@@ -136,7 +136,7 @@ const sanitizeArtifactSegment = (value: string) => {
   return normalized.length > 0 ? normalized : 'artifact';
 };
 
-const resolveArtifactDirectory = async (artifactName: string) => {
+export const resolveArtifactDirectory = async (artifactName: string) => {
   const testRunId = process.env.MODESTA_TEST_RUN_ID ?? 'unknown-test-run';
   const workerId =
     process.env.VITEST_WORKER_ID ??
@@ -153,7 +153,7 @@ const resolveArtifactDirectory = async (artifactName: string) => {
   return artifactDirectory;
 };
 
-const saveArtifactText = async (
+export const saveArtifactText = async (
   artifactName: string | undefined,
   relativePath: string,
   content: string
@@ -166,6 +166,24 @@ const saveArtifactText = async (
   const artifactPath = join(artifactDirectory, relativePath);
   await mkdir(dirname(artifactPath), { recursive: true });
   await writeFile(artifactPath, content, 'utf8');
+};
+
+export const saveArtifactDirectory = async (
+  artifactName: string | undefined,
+  relativePath: string,
+  sourceDirectory: string
+) => {
+  if (artifactName == null) {
+    return;
+  }
+
+  const artifactDirectory = await resolveArtifactDirectory(artifactName);
+  const artifactPath = join(artifactDirectory, relativePath);
+  await rm(artifactPath, { force: true, recursive: true });
+  await cp(sourceDirectory, artifactPath, {
+    force: true,
+    recursive: true,
+  });
 };
 
 const writeProjectFiles = async (
@@ -331,8 +349,6 @@ export const runModestaCli = async (
     await rm(workingDirectory, { force: true, recursive: true });
   }
 };
-
-export { saveArtifactText };
 
 export const transpileGeneratedSource = async (source: string) => {
   const result = ts.transpileModule(source, {

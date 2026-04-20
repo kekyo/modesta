@@ -159,7 +159,7 @@ console.log(user.name);
 - 簡潔な出力と明快なインターフェイスにより、アプリケーションに組み込む際の障害を極力排除。
 - ゼロランタイム参照、完全に独立したコード出力。ブラウザやNode.jsなどの、任意の環境で使用可能。
 - CLI とライブラリ API の両方で利用可能。更にViteプラグインを使用してHMRに連動可能。
-- `Swashbuckle.AspNetCore` を使用してテストを実施。
+- [Swashbuckle.AspNetCore](https://github.com/domaindrivendev/Swashbuckle.AspNetCore) と [Huma](https://huma.rocks/) の swagger/OpenAPI 出力を使用してテストを実施。
 
 ---
 

@@ -79,8 +79,12 @@ export const resolveParameters = (
     const name = getRequiredString(parameter, 'name', 'parameter name');
     const propertyName = normalizeParameterName(name, 'value');
     return {
-      description: getString(parameter, 'description'),
-      deprecated: getBoolean(parameter, 'deprecated') ?? false,
+      description:
+        getString(parameter, 'description') ?? getString(schema, 'description'),
+      deprecated:
+        getBoolean(parameter, 'deprecated') ??
+        getBoolean(schema, 'deprecated') ??
+        false,
       duplicatedPropertyName: undefined,
       location,
       name,
@@ -127,17 +131,19 @@ export const resolveRequestBody = (
     getRequiredRecord(rawRequestBody, 'content', 'requestBody content'),
     `requestBody:${requestBodyTypeName}`
   );
+  const schemaDescription = resolveSchemaDescription(
+    context.document,
+    mediaType.schema
+  );
 
   return {
     contentType: mediaType.mediaType,
     envelopeTypeName,
-    parameterDescription: getString(rawRequestBody, 'description'),
+    parameterDescription:
+      getString(rawRequestBody, 'description') ?? schemaDescription,
     required: getBoolean(rawRequestBody, 'required') ?? false,
     schema: mediaType.schema,
-    schemaDescription: resolveSchemaDescription(
-      context.document,
-      mediaType.schema
-    ),
+    schemaDescription,
     typeName: requestBodyTypeName,
   };
 };
@@ -230,8 +236,12 @@ export const resolveResponseHeaders = (
             );
       const propertyName = normalizeParameterName(name, 'header');
       return {
-        description: getString(header, 'description'),
-        deprecated: getBoolean(header, 'deprecated') ?? false,
+        description:
+          getString(header, 'description') ?? getString(schema, 'description'),
+        deprecated:
+          getBoolean(header, 'deprecated') ??
+          getBoolean(schema, 'deprecated') ??
+          false,
         duplicatedPropertyName: undefined,
         name,
         originalPropertyName: propertyName,

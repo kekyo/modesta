@@ -155,7 +155,7 @@ You can either perform this process manually or automate it using a Vite plugin.
 - Concise output and a clear interface minimize obstacles when integrating the code into applications.
 - Zero runtime dependencies; completely standalone code output. Usable in any environment, including browsers and Node.js.
 - Usable both as a CLI and as a library API. Additionally, it can be integrated with HMR using the Vite plugin.
-- Tested with `Swashbuckle.AspNetCore` swagger output.
+- Tested with [Swashbuckle.AspNetCore](https://github.com/domaindrivendev/Swashbuckle.AspNetCore) and [Huma](https://huma.rocks/) swagger/OpenAPI output.
 
 ---
 

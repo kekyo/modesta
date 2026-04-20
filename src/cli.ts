@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// modesta - Lightweight swagger proxy generator
+// modesta - Simplest zero-dependency swagger proxy generator
 // Copyright (c) Kouji Matsui (@kekyo@mi.kekyo.net)
 // Under MIT.
 // https://github.com/kekyo/modesta/
@@ -17,28 +17,32 @@ import {
   getModestaPluginOptions,
   resolveModestaPluginOptions,
 } from './vite-util';
-import { git_commit_hash, version } from './generated/packageMetadata';
+import {
+  author,
+  description,
+  git_commit_hash,
+  license,
+  repository_url,
+  version,
+} from './generated/packageMetadata';
 import { syncModestaOutput } from './sync';
 
 //////////////////////////////////////////////////////////////////////////
 
 const usage = [
   `modesta [${version}-${git_commit_hash}]`,
-  'Copyright (c) Kouji Matsui (@kekyo@mi.kekyo.net)',
-  'License: Under MIT.',
-  'https://github.com/kekyo/modesta',
+  description,
+  author,
+  `License: Under ${license}.`,
+  repository_url,
   '',
   'Usage: modesta [--sync]',
   '       modesta [--insecure] [<swagger.json|swagger.yaml|https://...>] [<generated.ts>]',
   '',
   'Options:',
   '  --insecure    Disable TLS certificate verification for remote https inputs.',
-  '  --sync    Read modesta() options from vite.config.* and synchronize once.',
+  '  --sync    Read modesta Vite options from vite.config.* and synchronize once.',
   '  --help    Show this help.',
-  '',
-  'Behavior:',
-  '  No input argument: read Swagger/OpenAPI text from stdin.',
-  '  No output argument: write generated TypeScript source to stdout.',
 ].join('\n');
 
 const httpUrlPattern = /^https?:\/\//iu;

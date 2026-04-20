@@ -1,4 +1,4 @@
-// modesta - Lightweight swagger proxy generator
+// modesta - Simplest zero-dependency swagger proxy generator
 // Copyright (c) Kouji Matsui (@kekyo@mi.kekyo.net)
 // Under MIT.
 // https://github.com/kekyo/modesta/
@@ -160,51 +160,51 @@ describe('naming and grouping rules', () => {
     const usersBlock = getInterfaceBlock(pathGroupingSource, 'users');
 
     expect(xmlCommentsBlock).toContain(
-      'readonly get_documented: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ValueEnvelope>;'
+      'readonly get_documented: (options?: AccessorOptions | undefined) => Promise<ValueEnvelope>;'
     );
     expect(xmlCommentsBlock).toContain(
-      'readonly post_documented: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ValueEnvelope>;'
+      'readonly post_documented: (options?: AccessorOptions | undefined) => Promise<ValueEnvelope>;'
     );
     expect(xmlCommentsBlock).toContain(
-      'readonly get_returns_only: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ValueEnvelope>;'
+      'readonly get_returns_only: (options?: AccessorOptions | undefined) => Promise<ValueEnvelope>;'
     );
     expect(anotherBlock).toContain(
-      'readonly get_returns_only: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ValueEnvelope>;'
+      'readonly get_returns_only: (options?: AccessorOptions | undefined) => Promise<ValueEnvelope>;'
     );
     expect(usersBlock).toContain(
-      'readonly get_by_id: (args: users_get_by_id_arguments, options?: AccessorOptionsWithoutContext | undefined) => Promise<ValueEnvelope>;'
+      'readonly get_by_id: (args: users_get_by_id_arguments, options?: AccessorOptions | undefined) => Promise<ValueEnvelope>;'
     );
 
     expect(pathGroupingSource).toContain(
       [
-        'export function create_xml_comments_accessor(sender: AccessorSenderWithoutContext): xml_comments;',
+        'export function create_xml_comments_accessor(sender: AccessorSender): xml_comments;',
         'export function create_xml_comments_accessor<TAccessorContext>(',
         '  sender: AccessorSenderWithContext<TAccessorContext>',
         '): xml_comments_with_context<TAccessorContext>;',
         'export function create_xml_comments_accessor<TAccessorContext>(',
-        '  sender: AccessorSenderWithoutContext | AccessorSenderWithContext<TAccessorContext>',
+        '  sender: AccessorSender | AccessorSenderWithContext<TAccessorContext>',
         '): xml_comments | xml_comments_with_context<TAccessorContext> {',
       ].join('\n')
     );
     expect(pathGroupingSource).toContain(
       [
-        'export function create_another_accessor(sender: AccessorSenderWithoutContext): another;',
+        'export function create_another_accessor(sender: AccessorSender): another;',
         'export function create_another_accessor<TAccessorContext>(',
         '  sender: AccessorSenderWithContext<TAccessorContext>',
         '): another_with_context<TAccessorContext>;',
         'export function create_another_accessor<TAccessorContext>(',
-        '  sender: AccessorSenderWithoutContext | AccessorSenderWithContext<TAccessorContext>',
+        '  sender: AccessorSender | AccessorSenderWithContext<TAccessorContext>',
         '): another | another_with_context<TAccessorContext> {',
       ].join('\n')
     );
     expect(pathGroupingSource).toContain(
       [
-        'export function create_users_accessor(sender: AccessorSenderWithoutContext): users;',
+        'export function create_users_accessor(sender: AccessorSender): users;',
         'export function create_users_accessor<TAccessorContext>(',
         '  sender: AccessorSenderWithContext<TAccessorContext>',
         '): users_with_context<TAccessorContext>;',
         'export function create_users_accessor<TAccessorContext>(',
-        '  sender: AccessorSenderWithoutContext | AccessorSenderWithContext<TAccessorContext>',
+        '  sender: AccessorSender | AccessorSenderWithContext<TAccessorContext>',
         '): users | users_with_context<TAccessorContext> {',
       ].join('\n')
     );
@@ -222,13 +222,13 @@ describe('naming and grouping rules', () => {
     const hogeBlock = getInterfaceBlock(uniqueSuffixSource, 'hoge');
 
     expect(foobarXmlCommentsBlock).toContain(
-      'readonly get_documented: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ValueEnvelope>;'
+      'readonly get_documented: (options?: AccessorOptions | undefined) => Promise<ValueEnvelope>;'
     );
     expect(bazXmlCommentsBlock).toContain(
-      'readonly get_documented: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ValueEnvelope>;'
+      'readonly get_documented: (options?: AccessorOptions | undefined) => Promise<ValueEnvelope>;'
     );
     expect(hogeBlock).toContain(
-      'readonly get_documented: (options?: AccessorOptionsWithoutContext | undefined) => Promise<ValueEnvelope>;'
+      'readonly get_documented: (options?: AccessorOptions | undefined) => Promise<ValueEnvelope>;'
     );
   });
 

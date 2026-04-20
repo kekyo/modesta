@@ -1,4 +1,4 @@
-// modesta - Lightweight swagger proxy generator
+// modesta - Simplest zero-dependency swagger proxy generator
 // Copyright (c) Kouji Matsui (@kekyo@mi.kekyo.net)
 // Under MIT.
 // https://github.com/kekyo/modesta/
@@ -130,28 +130,28 @@ describe('CLI and format support', () => {
     expect(generatedSource).toContain('export interface ListSummaries {');
     expect(generatedSource).toContain(
       [
-        'export function create_LookupSummaries_accessor(sender: AccessorSenderWithoutContext): LookupSummaries;',
+        'export function create_LookupSummaries_accessor(sender: AccessorSender): LookupSummaries;',
         'export function create_LookupSummaries_accessor<TAccessorContext>(',
         '  sender: AccessorSenderWithContext<TAccessorContext>',
         '): LookupSummaries_with_context<TAccessorContext>;',
         'export function create_LookupSummaries_accessor<TAccessorContext>(',
-        '  sender: AccessorSenderWithoutContext | AccessorSenderWithContext<TAccessorContext>',
+        '  sender: AccessorSender | AccessorSenderWithContext<TAccessorContext>',
         '): LookupSummaries | LookupSummaries_with_context<TAccessorContext> {',
       ].join('\n')
     );
     expect(generatedSource).toContain(
       [
-        'export function create_ListSummaries_accessor(sender: AccessorSenderWithoutContext): ListSummaries;',
+        'export function create_ListSummaries_accessor(sender: AccessorSender): ListSummaries;',
         'export function create_ListSummaries_accessor<TAccessorContext>(',
         '  sender: AccessorSenderWithContext<TAccessorContext>',
         '): ListSummaries_with_context<TAccessorContext>;',
         'export function create_ListSummaries_accessor<TAccessorContext>(',
-        '  sender: AccessorSenderWithoutContext | AccessorSenderWithContext<TAccessorContext>',
+        '  sender: AccessorSender | AccessorSenderWithContext<TAccessorContext>',
         '): ListSummaries | ListSummaries_with_context<TAccessorContext> {',
       ].join('\n')
     );
     expect(generatedSource).toContain(
-      'export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSenderWithoutContext => {'
+      'export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSender => {'
     );
   });
 
@@ -216,12 +216,12 @@ describe('CLI and format support', () => {
     expect(stdout).toContain('export interface ListSummaries {');
     expect(stdout).toContain(
       [
-        'export function create_LookupSummaries_accessor(sender: AccessorSenderWithoutContext): LookupSummaries;',
+        'export function create_LookupSummaries_accessor(sender: AccessorSender): LookupSummaries;',
         'export function create_LookupSummaries_accessor<TAccessorContext>(',
         '  sender: AccessorSenderWithContext<TAccessorContext>',
         '): LookupSummaries_with_context<TAccessorContext>;',
         'export function create_LookupSummaries_accessor<TAccessorContext>(',
-        '  sender: AccessorSenderWithoutContext | AccessorSenderWithContext<TAccessorContext>',
+        '  sender: AccessorSender | AccessorSenderWithContext<TAccessorContext>',
         '): LookupSummaries | LookupSummaries_with_context<TAccessorContext> {',
       ].join('\n')
     );
@@ -420,7 +420,7 @@ describe('CLI and format support', () => {
       expect(fromYaml).toBe(fromJson);
       expect(fromJson).toContain('export interface LookupSummaries {');
       expect(fromJson).toContain(
-        'readonly post: (args: LookupRequest, options?: AccessorOptionsWithoutContext | undefined) => Promise<LookupSummaries_post_response>;'
+        'readonly post: (args: LookupRequest, options?: AccessorOptions | undefined) => Promise<LookupSummaries_post_response>;'
       );
       expect(fromJson).toContain('[key: string]: SummaryItem;');
       expect(fromJson).toContain('recordedAt: string;');

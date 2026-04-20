@@ -1,4 +1,4 @@
-// modesta - Lightweight swagger proxy generator
+// modesta - Simplest zero-dependency swagger proxy generator
 // Copyright (c) Kouji Matsui (@kekyo@mi.kekyo.net)
 // Under MIT.
 // https://github.com/kekyo/modesta/
@@ -336,7 +336,7 @@ const renderAccessorInterface = (
     );
     const optionsType = withContext
       ? 'AccessorOptionsWithContext<TAccessorContext>'
-      : 'AccessorOptionsWithoutContext';
+      : 'AccessorOptions';
     const optionsArgument = withContext
       ? `options: ${optionsType}`
       : `options?: ${optionsType} | undefined`;
@@ -500,14 +500,14 @@ const renderAccessorFactory = (
     )
   );
   push(
-    `export function ${accessorGroup.factoryName}(sender: AccessorSenderWithoutContext): ${accessorGroup.interfaceName};`
+    `export function ${accessorGroup.factoryName}(sender: AccessorSender): ${accessorGroup.interfaceName};`
   );
   push(`export function ${accessorGroup.factoryName}<TAccessorContext>(`);
   push('  sender: AccessorSenderWithContext<TAccessorContext>');
   push(`): ${accessorWithContextInterfaceName}<TAccessorContext>;`);
   push(`export function ${accessorGroup.factoryName}<TAccessorContext>(`);
   push(
-    '  sender: AccessorSenderWithoutContext | AccessorSenderWithContext<TAccessorContext>'
+    '  sender: AccessorSender | AccessorSenderWithContext<TAccessorContext>'
   );
   push(
     `): ${accessorGroup.interfaceName} | ${accessorWithContextInterfaceName}<TAccessorContext> {`
@@ -515,7 +515,7 @@ const renderAccessorFactory = (
   push('  const modestaSender = sender as <TResponse>(');
   push('    request: AccessorRequestDescriptor,');
   push(
-    '    options: AccessorOptionsWithoutContext | AccessorOptionsWithContext<TAccessorContext> | undefined'
+    '    options: AccessorOptions | AccessorOptionsWithContext<TAccessorContext> | undefined'
   );
   push('  ) => Promise<TResponse>;');
   push('  return {');

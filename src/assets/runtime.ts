@@ -63,7 +63,7 @@ export interface AccessorOptionsWithContext<TAccessorContext>
  * @param options Additional accessor call options without per-call context.
  * @returns Promise that resolves to the typed response payload.
  */
-export type AccessorSenderWithoutContext = <TResponse>(
+export type AccessorSender = <TResponse>(
   request: AccessorRequestDescriptor,
   options: AccessorOptionsWithoutContext | undefined) => Promise<TResponse>;
 
@@ -493,7 +493,7 @@ export const modestaReadFetchResponseBody = (response: Response) => {
  * @remarks When `options.fetch` is omitted, `globalThis.fetch` must be available.
  * Per-call context values are not accepted by this sender implementation.
  */
-export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSenderWithoutContext => {
+export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSender => {
   const fetchImplementation = options.fetch ?? globalThis.fetch;
   if (typeof fetchImplementation !== 'function') {
     throw new Error(

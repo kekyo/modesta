@@ -361,7 +361,7 @@ describe('xml comments integration', () => {
     );
 
     expect(
-      getTypeAliasDocumentation(generatedSource, 'AccessorSenderWithoutContext')
+      getTypeAliasDocumentation(generatedSource, 'AccessorSender')
     ).toBe(
       [
         '/**',

@@ -500,14 +500,14 @@ const renderAccessorFactory = (
     )
   );
   push(
-    `export function ${accessorGroup.factoryName}(sender: AccessorSenderWithoutContext): ${accessorGroup.interfaceName};`
+    `export function ${accessorGroup.factoryName}(sender: AccessorSender): ${accessorGroup.interfaceName};`
   );
   push(`export function ${accessorGroup.factoryName}<TAccessorContext>(`);
   push('  sender: AccessorSenderWithContext<TAccessorContext>');
   push(`): ${accessorWithContextInterfaceName}<TAccessorContext>;`);
   push(`export function ${accessorGroup.factoryName}<TAccessorContext>(`);
   push(
-    '  sender: AccessorSenderWithoutContext | AccessorSenderWithContext<TAccessorContext>'
+    '  sender: AccessorSender | AccessorSenderWithContext<TAccessorContext>'
   );
   push(
     `): ${accessorGroup.interfaceName} | ${accessorWithContextInterfaceName}<TAccessorContext> {`

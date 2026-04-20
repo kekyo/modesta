@@ -100,7 +100,7 @@ export type AccessorSender =  /* ... */;
 export interface CreateFetchSenderOptions { /* ... */ }
 
 export const createFetchSender = (
-  options: CreateFetchSenderOptions
+  options?: CreateFetchSenderOptions | undefined
 ): AccessorSender => {
   /* ... (ヘルパー関数の実装) */
 };
@@ -271,6 +271,7 @@ export default defineConfig({
 
 1. 最初に"Sender関数"を生成します。これはリモートAPIにアクセスするためのトランスポートとして機能します。
    通常は `createFetchSender()` 関数を使用すれば十分でしょう。この関数は、内部でfetch APIを使用してリモートAPIにアクセスします。
+   ブラウザで `baseUrl` を省略した場合は、現在のページと同じ `globalThis.location.origin` を基準にします。Node.jsなどでは `baseUrl` を明示して下さい。
 2. 各アクセサファクトリ関数にSender関数を渡すことで、アクセサインターフェイスのインスタンスを生成できます。
 3. アクセサインターフェイスが、リモートのAPIのTypeScript表現を定義しているので、後はそれらの関数を呼び出すだけでAPIアクセスが実現します。
 

@@ -81,8 +81,8 @@ export type AccessorSenderWithContext<TAccessorContext> = <TResponse>(
 
 /** Options that configure the fetch-based sender. */
 export interface CreateFetchSenderOptions {
-  /** Base URL used to resolve generated accessor request URLs. */
-  readonly baseUrl: string | URL;
+  /** Base URL used to resolve generated accessor request URLs. Defaults to globalThis.location.origin when available. */
+  readonly baseUrl?: string | URL | undefined;
   /** Fetch implementation to use. Defaults to globalThis.fetch. */
   readonly fetch?: typeof fetch | undefined;
   /** Default headers merged with per-request headers. */
@@ -95,8 +95,8 @@ export interface CreateFetchSenderOptions {
  * Options that configure request preparation for custom sender implementations.
  */
 export interface ModestaPrepareRequestOptions {
-  /** Base URL used to resolve generated accessor request URLs. */
-  readonly baseUrl: string | URL;
+  /** Base URL used to resolve generated accessor request URLs. Defaults to globalThis.location.origin when available. */
+  readonly baseUrl?: string | URL | undefined;
   /** Default headers merged with per-request headers. */
   readonly headers?: Record<string, string> | undefined;
 }
@@ -105,7 +105,7 @@ export interface ModestaPrepareRequestOptions {
  * Transport-neutral request values prepared for a sender implementation.
  */
 export interface ModestaPreparedRequest {
-  /** Absolute request URL resolved against the configured base URL. */
+  /** Absolute request URL resolved against the active base URL. */
   readonly url: URL;
   /** HTTP method sent to the endpoint. */
   readonly method: string;
@@ -248,6 +248,25 @@ const modestaMergeRequestHeaders = (
 
   return hasRequestHeaders ? requestHeaders : undefined;
 };
+
+const modestaGetDefaultBaseUrl = () => {
+  const globalScope = globalThis as typeof globalThis & {
+    readonly location?: {
+      readonly origin?: string | undefined;
+    } | undefined;
+  };
+  const origin = globalScope.location?.origin;
+  if (origin != null && origin.length > 0) {
+    return origin;
+  }
+
+  throw new Error(
+    'Base URL is not available. Pass baseUrl explicitly outside browser-like environments.'
+  );
+};
+
+const modestaResolveBaseUrl = (baseUrl: string | URL | undefined) =>
+  baseUrl ?? modestaGetDefaultBaseUrl();
 
 const modestaAssignProperties = (
   target: Record<string, unknown>,
@@ -414,17 +433,17 @@ const modestaComposeResponse = (
  * @param request Prepared request descriptor emitted by the generated accessor.
  * @param accessorOptions Additional accessor call options passed to the sender.
  * @param options Options that configure request preparation.
- * @returns Request values resolved against the configured base URL.
+ * @returns Request values resolved against the active base URL.
  * @remarks The returned `body` is not serialized. Use `modestaSerializeRequestBody()` when a transport expects a serialized payload.
  */
 export const modestaPrepareRequest = (
   request: AccessorRequestDescriptor,
   accessorOptions: AccessorOptions | undefined,
-  options: ModestaPrepareRequestOptions
+  options: ModestaPrepareRequestOptions | undefined
 ): ModestaPreparedRequest => ({
-  url: new URL(request.url, options.baseUrl),
+  url: new URL(request.url, modestaResolveBaseUrl(options?.baseUrl)),
   method: request.method,
-  headers: modestaMergeRequestHeaders(options.headers, request.headers),
+  headers: modestaMergeRequestHeaders(options?.headers, request.headers),
   body: request.body,
   signal: accessorOptions?.signal,
 });
@@ -491,10 +510,11 @@ export const modestaReadFetchResponseBody = (response: Response) => {
  * @param options Options that configure the fetch-based sender.
  * @returns Sender implementation that executes requests via the fetch API.
  * @remarks When `options.fetch` is omitted, `globalThis.fetch` must be available.
+ * When `options.baseUrl` is omitted, `globalThis.location.origin` must be available.
  * Per-call context values are not accepted by this sender implementation.
  */
-export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSender => {
-  const fetchImplementation = options.fetch ?? globalThis.fetch;
+export const createFetchSender = (options?: CreateFetchSenderOptions | undefined): AccessorSender => {
+  const fetchImplementation = options?.fetch ?? globalThis.fetch;
   if (typeof fetchImplementation !== 'function') {
     throw new Error(
       'Fetch implementation is not available. Pass CreateFetchSenderOptions.fetch explicitly.'
@@ -509,7 +529,7 @@ export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSe
     );
     const body = modestaSerializeRequestBody(request);
     const requestInit: RequestInit =
-      options.init
+      options?.init
         ? {
             ...options.init,
             method: preparedRequest.method,

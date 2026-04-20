@@ -255,6 +255,23 @@ describe('operation definition generation', () => {
     edgeCaseWarnings.filter((message) =>
       message.includes(`accessor '${accessorName}'`)
     );
+  const replaceGlobalProperty = (name: string, value: unknown) => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
+    Object.defineProperty(globalThis, name, {
+      configurable: true,
+      value,
+      writable: true,
+    });
+
+    return () => {
+      if (descriptor == null) {
+        delete (globalThis as Record<string, unknown>)[name];
+        return;
+      }
+
+      Object.defineProperty(globalThis, name, descriptor);
+    };
+  };
 
   beforeAll(async () => {
     generatedSource = await generateAccessorSourceFromProject({
@@ -716,8 +733,10 @@ describe('operation definition generation', () => {
         '// @ts-expect-error accessor factories no longer accept interface context arguments',
         "create_CreateItem_accessor(senderWithContext, 'trace-42');",
         '',
-        "const fetchSender = createFetchSender({ baseUrl: 'https://example.com/' });",
+        'const fetchSender = createFetchSender();',
+        "const fetchSenderWithOptions = createFetchSender({ baseUrl: 'https://example.com/' });",
         'create_DeleteItem_accessor(fetchSender);',
+        'create_DeleteItem_accessor(fetchSenderWithOptions);',
         '// @ts-expect-error accessor factories no longer accept interface context arguments',
         "create_DeleteItem_accessor(fetchSender, 'trace-42');",
         '',
@@ -950,6 +969,86 @@ describe('operation definition generation', () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(1);
     expect(json).toHaveBeenCalledTimes(1);
     expect(text).not.toHaveBeenCalled();
+  });
+
+  it('uses the current origin for fetch-based sender when baseUrl is omitted', async () => {
+    const restoreLocation = replaceGlobalProperty('location', {
+      origin: 'https://current.example',
+    });
+    const json = vi.fn(async () => ({
+      id: '42',
+      source: 'route',
+    }));
+    const fetchImplementation = vi.fn(
+      async (input: URL, init?: RequestInit) => {
+        expect(String(input)).toBe('https://current.example/route/42');
+        expect(init).toEqual({
+          method: 'GET',
+          headers: {
+            accept: 'application/json',
+          },
+        });
+
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: {
+            get: (name: string) =>
+              name === 'content-type' ? 'application/json' : null,
+          },
+          json,
+          text: async () => '',
+        };
+      }
+    );
+    const restoreFetch = replaceGlobalProperty('fetch', fetchImplementation);
+
+    try {
+      const sender = generatedModule.createFetchSender();
+      const accessor = generatedModule.create_GetRouteValue_accessor(sender);
+
+      await expect(
+        accessor.get({
+          id: '42',
+        })
+      ).resolves.toEqual({
+        id: '42',
+        source: 'route',
+      });
+    } finally {
+      restoreFetch();
+      restoreLocation();
+    }
+
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+    expect(json).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires baseUrl when the current origin is unavailable', async () => {
+    const restoreLocation = replaceGlobalProperty('location', undefined);
+    const fetchImplementation = vi.fn(async () => {
+      throw new Error('Unexpected fetch call.');
+    });
+
+    try {
+      const sender = generatedModule.createFetchSender({
+        fetch: fetchImplementation,
+      });
+      const accessor = generatedModule.create_GetRouteValue_accessor(sender);
+
+      await expect(
+        accessor.get({
+          id: '42',
+        })
+      ).rejects.toThrow(
+        'Base URL is not available. Pass baseUrl explicitly outside browser-like environments.'
+      );
+    } finally {
+      restoreLocation();
+    }
+
+    expect(fetchImplementation).not.toHaveBeenCalled();
   });
 
   it('emits runtime helpers that short-circuit empty response header projections', () => {

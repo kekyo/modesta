@@ -102,7 +102,7 @@ export type AccessorSender =  /* ... */;
 export interface CreateFetchSenderOptions { /* ... */ }
 
 export const createFetchSender = (
-  options: CreateFetchSenderOptions
+  options?: CreateFetchSenderOptions | undefined
 ): AccessorSender => {
   /* ... (helper implementation is generated here) */
 };
@@ -272,6 +272,7 @@ Import and use those definitions from the generated file.
 
 1. First, create a "Sender function". It works as the transport used to access the remote API.
    In most cases, `createFetchSender()` is enough. Internally, this function uses the fetch API to access the remote API.
+   In browsers, omitting `baseUrl` resolves requests against the current `globalThis.location.origin`. In Node.js and similar environments, pass `baseUrl` explicitly.
 2. Pass the Sender function to each accessor factory function to create an accessor interface instance.
 3. The accessor interface defines a TypeScript representation of the remote API, so API access is completed by calling those functions.
 

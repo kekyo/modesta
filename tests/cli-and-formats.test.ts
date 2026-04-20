@@ -151,7 +151,7 @@ describe('CLI and format support', () => {
       ].join('\n')
     );
     expect(generatedSource).toContain(
-      'export const createFetchSender = (options: CreateFetchSenderOptions): AccessorSender => {'
+      'export const createFetchSender = (options?: CreateFetchSenderOptions | undefined): AccessorSender => {'
     );
   });
 

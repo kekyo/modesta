@@ -291,7 +291,10 @@ describe('xml comments integration', () => {
     );
     expect(requestDescriptorBlock).toContain('readonly operationName: string;');
     expect(fetchSenderOptionsBlock).toContain(
-      'readonly baseUrl: string | URL;'
+      'readonly baseUrl?: string | URL | undefined;'
+    );
+    expect(modestaPrepareRequestOptionsBlock).toContain(
+      'readonly baseUrl?: string | URL | undefined;'
     );
     expectMemberDocumentation(
       requestDescriptorBlock,
@@ -390,7 +393,7 @@ describe('xml comments integration', () => {
     expectMemberDocumentation(
       fetchSenderOptionsBlock,
       'baseUrl',
-      '/** Base URL used to resolve generated accessor request URLs. */'
+      '/** Base URL used to resolve generated accessor request URLs. Defaults to globalThis.location.origin when available. */'
     );
     expectMemberDocumentation(
       fetchSenderOptionsBlock,
@@ -419,7 +422,7 @@ describe('xml comments integration', () => {
     expectMemberDocumentation(
       modestaPrepareRequestOptionsBlock,
       'baseUrl',
-      '/** Base URL used to resolve generated accessor request URLs. */'
+      '/** Base URL used to resolve generated accessor request URLs. Defaults to globalThis.location.origin when available. */'
     );
     expectMemberDocumentation(
       modestaPrepareRequestOptionsBlock,
@@ -438,7 +441,7 @@ describe('xml comments integration', () => {
     expectMemberDocumentation(
       modestaPreparedRequestBlock,
       'url',
-      '/** Absolute request URL resolved against the configured base URL. */'
+      '/** Absolute request URL resolved against the active base URL. */'
     );
     expectMemberDocumentation(
       modestaPreparedRequestBlock,
@@ -487,6 +490,7 @@ describe('xml comments integration', () => {
         ' * @param options Options that configure the fetch-based sender.',
         ' * @returns Sender implementation that executes requests via the fetch API.',
         ' * @remarks When `options.fetch` is omitted, `globalThis.fetch` must be available.',
+        ' * When `options.baseUrl` is omitted, `globalThis.location.origin` must be available.',
         ' * Per-call context values are not accepted by this sender implementation.',
         ' */',
       ].join('\n')
@@ -500,7 +504,7 @@ describe('xml comments integration', () => {
         ' * @param request Prepared request descriptor emitted by the generated accessor.',
         ' * @param accessorOptions Additional accessor call options passed to the sender.',
         ' * @param options Options that configure request preparation.',
-        ' * @returns Request values resolved against the configured base URL.',
+        ' * @returns Request values resolved against the active base URL.',
         ' * @remarks The returned `body` is not serialized. Use `modestaSerializeRequestBody()` when a transport expects a serialized payload.',
         ' */',
       ].join('\n')

@@ -1,7 +1,7 @@
 {
   "name": "modesta",
   "version": "0.0.1",
-  "description": "Lightweight swagger proxy generator",
+  "description": "Simplest zero-dependency swagger proxy generator",
   "keywords": [
     "swagger",
     "proxy-generator",

@@ -516,6 +516,88 @@ Generated files start with a header like this:
 
 ---
 
+## Custom Serializers (Advanced Topic)
+
+modesta provides helper definitions for conversion mappings and custom serializers so values generated from Swagger can be converted and restored with your own rules.
+
+For example, when Swagger emits a `format` value such as `date-time`, the default generated code treats it as a plain string.
+By defining a type mapping and a custom serializer, you can automatically convert such Swagger definitions to `Date` objects.
+
+### Type Mapping
+
+To change the generated TypeScript type, specify `formatTypeMappings` during code generation.
+The following example shows the Vite plugin configuration:
+
+```typescript
+import { defineConfig } from 'vite';
+import modesta from 'modesta/vite';
+
+export default defineConfig({
+  plugins: [
+    modesta({
+      source: './swagger.json',
+      // Map OpenAPI format values to TypeScript type expressions.
+      formatTypeMappings: {
+        'date-time': 'Date',
+      },
+    }),
+  ],
+});
+```
+
+With this setting, a field declared as `type: "string", format: "date-time"` is emitted as `Date` in the generated TypeScript type.
+For example, when using `dayjs`, you can specify a type expression such as `'import("dayjs").Dayjs'`.
+
+Note: `formatTypeMappings` only changes generated TypeScript types. It does not perform runtime conversion.
+Therefore, if you emit `date-time` as `Date`, your custom serializer must convert values with the same rule. See the next section.
+
+### Runtime Conversion
+
+You can implement runtime conversion from scratch, but for JSON payloads (`application/json`), `createCustomJsonSerializer()` provides a simpler way:
+
+```typescript
+import {
+  createFetchSender,
+  createCustomJsonSerializer,
+} from './generated/accessors';
+
+// Create a custom JSON serializer.
+const jsonSerializer = createCustomJsonSerializer({
+  // Convert TypeScript/JavaScript values to JSON values.
+  trySerialize: (value, format, ref) => {
+    // If the Swagger format is date-time and the value is a Date object:
+    if (format === 'date-time' && value instanceof Date) {
+      // Convert it to an ISO string.
+      ref.result = value.toISOString();
+      return true;
+    }
+    // Otherwise, use the normal conversion path.
+    return false;
+  },
+  // Convert JSON values to TypeScript/JavaScript values.
+  tryDeserialize: (value, format, ref) => {
+    // If the Swagger format is date-time and the payload value is a string:
+    if (format === 'date-time' && typeof value === 'string') {
+      // Create a Date object from the string.
+      ref.result = new Date(value);
+      return true;
+    }
+    // Otherwise, use the normal conversion path.
+    return false;
+  },
+});
+
+// Create a sender with the custom serializer.
+const sender = createFetchSender({
+  // Map application/json to the custom serializer.
+  serializers: new Map([
+    ['application/json', jsonSerializer],
+  ]),
+});
+```
+
+---
+
 ## Library Usage (Advanced Topic)
 
 When using modesta as a library, use public APIs such as `loadOpenApiDocumentFromFile`, `generateAccessorSourceFromFile`, and `generateAccessorSource`.

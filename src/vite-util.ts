@@ -91,6 +91,7 @@ export const resolveModestaPluginOptions = (
   }
 
   return {
+    formatTypeMappings: options.formatTypeMappings,
     inputKind: normalizedSource.inputKind,
     insecure: options.insecure === true,
     outputPath: resolvedOutputPath,
@@ -107,12 +108,23 @@ const isRecord = (
   );
 };
 
+const isStringRecord = (
+  value: unknown
+): value is Readonly<Record<string, string>> => {
+  return (
+    isRecord(value) &&
+    Object.values(value).every((entry) => typeof entry === 'string')
+  );
+};
+
 const isModestaPluginOptions = (
   value: unknown
 ): value is ModestaPluginOptions => {
   return (
     isRecord(value) &&
     (typeof value.source === 'string' || value.source instanceof URL) &&
+    (value.formatTypeMappings == null ||
+      isStringRecord(value.formatTypeMappings)) &&
     (value.insecure == null || typeof value.insecure === 'boolean') &&
     (value.outputPath == null || typeof value.outputPath === 'string')
   );

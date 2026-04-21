@@ -14,8 +14,12 @@ export interface AccessorRequestDescriptor {
   readonly headers: Record<string, string>;
   /** Request body payload passed to the sender. */
   readonly body: unknown;
+  /** Schema metadata for the request body payload. */
+  readonly requestBodyMetadata?: AccessorSchemaMetadata | undefined;
   /** Expected response content type selected from the OpenAPI response definition. */
   readonly responseContentType: string | undefined;
+  /** Schema metadata for the response body payload. */
+  readonly responseBodyMetadata?: AccessorSchemaMetadata | undefined;
   /** Response header definitions used to project the sender result. */
   readonly responseHeaders: readonly AccessorResponseHeaderDescriptor[];
   /** Indicates that primitive or array response bodies must be exposed through a `body` member when response headers are also defined. */
@@ -64,6 +68,20 @@ export interface AccessorOptionsWithContext<TAccessorContext>
 export type PayloadType = 'string' | 'ArrayBuffer';
 
 /**
+ * Schema metadata passed to serializers.
+ */
+export interface AccessorSchemaMetadata {
+  /** OpenAPI schema format for the current value. */
+  readonly format?: string | undefined;
+  /** Object property metadata keyed by JSON property name. */
+  readonly properties?: Readonly<Record<string, AccessorSchemaMetadata>> | undefined;
+  /** Array item metadata. */
+  readonly items?: AccessorSchemaMetadata | undefined;
+  /** Dictionary value metadata for additional object properties. */
+  readonly additionalProperties?: AccessorSchemaMetadata | undefined;
+}
+
+/**
  * Serialization hooks used by sender implementations.
  */
 export interface AccessorSenderSerializer {
@@ -72,15 +90,17 @@ export interface AccessorSenderSerializer {
   /**
    * Serializes a request body value into transport data.
    * @param value Target value
+   * @param metadata Schema metadata for the target value
    * @returns Serialized payload data
    */
-  readonly serialize: (value: unknown) => unknown;
+  readonly serialize: (value: unknown, metadata?: AccessorSchemaMetadata | undefined) => unknown;
   /**
    * Deserializes transport data into a response body value.
    * @param payloadData Serialized payload data
+   * @param metadata Schema metadata for the target value
    * @returns Retrieved value
    */
-  readonly deserialize: (payloadData: unknown) => unknown;
+  readonly deserialize: (payloadData: unknown, metadata?: AccessorSchemaMetadata | undefined) => unknown;
 }
 
 /**
@@ -299,10 +319,16 @@ const modestaFindSerializer = (
 const modestaSerializeFetchBody = (
   body: unknown,
   contentType: string | undefined,
-  serializers: ReadonlyMap<string, AccessorSenderSerializer>
+  serializers: ReadonlyMap<string, AccessorSenderSerializer>,
+  metadata: AccessorSchemaMetadata | undefined
 ) => {
   const serializer = modestaFindSerializer(serializers, contentType);
-  return serializer != null ? serializer.serialize(body) : body;
+  if (serializer == null) {
+    return body;
+  }
+  return metadata != null
+    ? serializer.serialize(body, metadata)
+    : serializer.serialize(body);
 };
 
 const modestaCreateSerializers = (
@@ -611,7 +637,8 @@ export const modestaSerializeRequestBody = (
   modestaSerializeFetchBody(
     request.body,
     request.headers['content-type'],
-    serializers
+    serializers,
+    request.requestBodyMetadata
   );
 
 /**
@@ -637,13 +664,15 @@ export const modestaProjectResponse = <TResponse>(
  * @param response Fetch-compatible response object.
  * @param contentType Expected response content type used when the response omits the content-type header.
  * @param serializers Serialization hooks keyed by media type.
+ * @param metadata Schema metadata for the response body payload.
  * @returns Parsed response body value, or undefined for empty responses.
  * @remarks A body is deserialized when a serializer matches the response content type. Other bodies are read with `response.text()`.
  */
 export const modestaReadFetchResponseBody = (
   response: Response,
   contentType: string | undefined,
-  serializers: ReadonlyMap<string, AccessorSenderSerializer>
+  serializers: ReadonlyMap<string, AccessorSenderSerializer>,
+  metadata?: AccessorSchemaMetadata | undefined
 ) => {
   if (
     response.status === 204 ||
@@ -665,10 +694,202 @@ export const modestaReadFetchResponseBody = (
       serializer.payloadType === 'ArrayBuffer'
         ? response.arrayBuffer()
         : response.text();
-    return payloadData.then((data) => serializer.deserialize(data));
+    return payloadData.then((data) =>
+      metadata != null
+        ? serializer.deserialize(data, metadata)
+        : serializer.deserialize(data)
+    );
   }
 
   return response.text();
+};
+
+/////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Result holder passed to custom JSON conversion hooks.
+ */
+export interface CustomJsonSerializerResult {
+  /** Converted value returned from a hook when the hook reports that it handled the input. */
+  result: unknown;
+}
+
+/**
+ * Options that configure custom JSON value conversions.
+ */
+export interface CustomJsonSerializerOptions {
+  /**
+   * Tries to convert a body value before JSON serialization.
+   * @param value Candidate value.
+   * @param format OpenAPI schema format for the candidate value.
+   * @param ref Result holder that receives the converted value.
+   * @returns true when the hook handled the value; otherwise false.
+   */
+  readonly trySerialize: (
+    value: unknown,
+    format: string | undefined,
+    ref: CustomJsonSerializerResult
+  ) => boolean;
+  /**
+   * Tries to convert a parsed JSON value after JSON deserialization.
+   * @param value Candidate parsed JSON value.
+   * @param format OpenAPI schema format for the candidate value.
+   * @param ref Result holder that receives the converted value.
+   * @returns true when the hook handled the value; otherwise false.
+   */
+  readonly tryDeserialize: (
+    value: unknown,
+    format: string | undefined,
+    ref: CustomJsonSerializerResult
+  ) => boolean;
+}
+
+const modestaGetCustomJsonPropertyMetadata = (
+  metadata: AccessorSchemaMetadata | undefined,
+  key: string
+) => {
+  const propertyMetadata = metadata?.properties?.[key];
+  return propertyMetadata ?? metadata?.additionalProperties;
+};
+
+const modestaApplyCustomJsonSerialization = (
+  value: unknown,
+  options: CustomJsonSerializerOptions,
+  scratchBuffer: CustomJsonSerializerResult,
+  metadata: AccessorSchemaMetadata | undefined,
+  parents: WeakSet<object>
+): unknown => {
+  scratchBuffer.result = undefined;
+  if (
+    options.trySerialize(
+      value,
+      metadata?.format,
+      scratchBuffer
+    )
+  ) {
+    return scratchBuffer.result;
+  }
+
+  if (value == null || typeof value !== 'object') {
+    return value;
+  }
+  if (typeof (value as { readonly toJSON?: unknown }).toJSON === 'function') {
+    return value;
+  }
+  if (parents.has(value)) {
+    throw new TypeError('Converting circular structure to JSON');
+  }
+
+  parents.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) =>
+        modestaApplyCustomJsonSerialization(
+          item,
+          options,
+          scratchBuffer,
+          metadata?.items,
+          parents
+        )
+      );
+    }
+
+    const source = value as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    for (const key of Object.keys(source)) {
+      result[key] = modestaApplyCustomJsonSerialization(
+        source[key],
+        options,
+        scratchBuffer,
+        modestaGetCustomJsonPropertyMetadata(metadata, key),
+        parents
+      );
+    }
+    return result;
+  } finally {
+    parents.delete(value);
+  }
+};
+
+const modestaApplyCustomJsonDeserialization = (
+  value: unknown,
+  options: CustomJsonSerializerOptions,
+  scratchBuffer: CustomJsonSerializerResult,
+  metadata: AccessorSchemaMetadata | undefined
+): unknown => {
+  let convertedValue = value;
+  if (value != null && typeof value === 'object') {
+    if (Array.isArray(value)) {
+      convertedValue = value.map((item) =>
+        modestaApplyCustomJsonDeserialization(
+          item,
+          options,
+          scratchBuffer,
+          metadata?.items
+        )
+      );
+    } else {
+      const source = value as Record<string, unknown>;
+      const result: Record<string, unknown> = {};
+      for (const key of Object.keys(source)) {
+        result[key] = modestaApplyCustomJsonDeserialization(
+          source[key],
+          options,
+          scratchBuffer,
+          modestaGetCustomJsonPropertyMetadata(metadata, key)
+        );
+      }
+      convertedValue = result;
+    }
+  }
+
+  scratchBuffer.result = undefined;
+  return options.tryDeserialize(
+    convertedValue,
+    metadata?.format,
+    scratchBuffer
+  )
+    ? scratchBuffer.result
+    : convertedValue;
+};
+
+/**
+ * Creates a JSON serializer with custom value conversion hooks.
+ * @param options Options that configure custom JSON value conversions.
+ * @returns JSON serializer that can be registered for JSON-compatible media types.
+ * @remarks A hook handles a value by writing `ref.result` and returning true. Returning false keeps the original value.
+ */
+export const createCustomJsonSerializer = (options: CustomJsonSerializerOptions): AccessorSenderSerializer => {
+  const scratchBuffer: CustomJsonSerializerResult = {
+    result: undefined,
+  };
+
+  return {
+    payloadType: 'string',
+    serialize: (
+      value: unknown,
+      metadata?: AccessorSchemaMetadata | undefined
+    ) =>
+      JSON.stringify(
+        modestaApplyCustomJsonSerialization(
+          value,
+          options,
+          scratchBuffer,
+          metadata,
+          new WeakSet()
+        )
+      ),
+    deserialize: (
+      payloadData: unknown,
+      metadata?: AccessorSchemaMetadata | undefined
+    ) =>
+      modestaApplyCustomJsonDeserialization(
+        JSON.parse(String(payloadData)),
+        options,
+        scratchBuffer,
+        metadata
+      ),
+  };
 };
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -740,7 +961,8 @@ export const createFetchSender = (options?: CreateFetchSenderOptions | undefined
       const responseBody = await modestaReadFetchResponseBody(
         response,
         request.responseContentType,
-        serializers
+        serializers,
+        request.responseBodyMetadata
       );
 
       return modestaProjectResponse(request, {

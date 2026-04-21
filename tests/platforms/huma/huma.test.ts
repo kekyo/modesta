@@ -27,6 +27,13 @@ describe('Huma platform integration', () => {
     warnings.filter((message) =>
       message.includes(`accessor '${accessorName}'`)
     );
+  const schemaUriMetadata = {
+    properties: {
+      $schema: {
+        format: 'uri',
+      },
+    },
+  };
 
   beforeAll(async () => {
     const result = await fetchOpenApiFromPlatformServer({
@@ -314,6 +321,7 @@ describe('Huma platform integration', () => {
         },
         method: 'GET',
         operationName: 'GetRouteValue.get',
+        responseBodyMetadata: schemaUriMetadata,
         responseContentType: 'application/json',
         responseHeaders: [],
         url: '/route/42',
@@ -337,6 +345,7 @@ describe('Huma platform integration', () => {
         },
         method: 'GET',
         operationName: 'GetPage.get',
+        responseBodyMetadata: schemaUriMetadata,
         responseContentType: 'application/json',
         responseHeaders: [],
         url: '/query?page-size=20',
@@ -361,6 +370,7 @@ describe('Huma platform integration', () => {
         },
         method: 'GET',
         operationName: 'GetHeaderValue.get',
+        responseBodyMetadata: schemaUriMetadata,
         responseContentType: 'application/json',
         responseHeaders: [],
         url: '/header',
@@ -387,6 +397,8 @@ describe('Huma platform integration', () => {
         },
         method: 'POST',
         operationName: 'CreateItem.post',
+        requestBodyMetadata: schemaUriMetadata,
+        responseBodyMetadata: schemaUriMetadata,
         responseContentType: 'application/json',
         responseHeaders: [],
         url: '/body',
@@ -419,6 +431,8 @@ describe('Huma platform integration', () => {
         },
         method: 'POST',
         operationName: 'CreateCombinedItem.post',
+        requestBodyMetadata: schemaUriMetadata,
+        responseBodyMetadata: schemaUriMetadata,
         responseContentType: 'application/json',
         responseHeaders: [],
         url: '/combined/42?page-size=20',

@@ -46,8 +46,6 @@
   "private": false,
   "scripts": {
     "build": "vite build",
-    "dev": "npm run build",
-    "repl": "npm run build",
     "test": "npm run build && vitest run",
     "pack": "npm run build && screw-up pack --pack-destination ./artifacts/"
   },
@@ -64,6 +62,7 @@
   },
   "devDependencies": {
     "@types/node": ">=25.5.0",
+    "dayjs": ">=1.11.0",
     "prettier-max": ">=1.16.0",
     "screw-up": ">=1.33.0",
     "typescript": ">=6.0.0",

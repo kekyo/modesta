@@ -22,6 +22,11 @@ export type OpenApiSource = string | URL;
 export type GenerateAccessorWarningSink = (message: string) => void;
 
 /**
+ * TypeScript type expressions keyed by OpenAPI schema format.
+ */
+export type FormatTypeMappings = Readonly<Record<string, string>>;
+
+/**
  * Options for loading an OpenAPI document from a file path or URL and generating
  * TypeScript accessor source code.
  */
@@ -39,6 +44,11 @@ export interface GenerateAccessorSourceFromFileOptions {
    * @default false
    */
   insecure?: boolean | undefined;
+  /**
+   * TypeScript type expressions used for schemas with matching OpenAPI
+   * `format` values.
+   */
+  formatTypeMappings?: FormatTypeMappings | undefined;
   /**
    * Callback invoked for non-fatal generation warnings such as renamed
    * argument members.
@@ -62,6 +72,11 @@ export interface GenerateAccessorSourceOptions {
    * include source metadata in generated output comments.
    */
   source?: OpenApiSource | undefined;
+  /**
+   * TypeScript type expressions used for schemas with matching OpenAPI
+   * `format` values.
+   */
+  formatTypeMappings?: FormatTypeMappings | undefined;
   /**
    * Callback invoked for non-fatal generation warnings such as renamed
    * argument members.

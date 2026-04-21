@@ -691,15 +691,17 @@ describe('operation definition generation', () => {
         '  /**',
         '   * Serializes a request body value into transport data.',
         '   * @param value Target value',
+        '   * @param metadata Schema metadata for the target value',
         '   * @returns Serialized payload data',
         '   */',
-        '  readonly serialize: (value: unknown) => unknown;',
+        '  readonly serialize: (value: unknown, metadata?: AccessorSchemaMetadata | undefined) => unknown;',
         '  /**',
         '   * Deserializes transport data into a response body value.',
         '   * @param payloadData Serialized payload data',
+        '   * @param metadata Schema metadata for the target value',
         '   * @returns Retrieved value',
         '   */',
-        '  readonly deserialize: (payloadData: unknown) => unknown;',
+        '  readonly deserialize: (payloadData: unknown, metadata?: AccessorSchemaMetadata | undefined) => unknown;',
         '}',
       ].join('\n')
     );
@@ -725,6 +727,12 @@ describe('operation definition generation', () => {
     );
   });
 
+  it('omits schema metadata when operation bodies do not contain formatted fields', () => {
+    expect(generatedSource).not.toContain('const modestaSchemaMetadata_');
+    expect(generatedSource).not.toContain('requestBodyMetadata:');
+    expect(generatedSource).not.toContain('responseBodyMetadata:');
+  });
+
   it('type-checks sender and per-call context requirements for generated accessors', async () => {
     const diagnostics = await getTypeScriptDiagnostics({
       'generated.ts': generatedSource,
@@ -733,12 +741,16 @@ describe('operation definition generation', () => {
         '  AccessorOptionsWithContext,',
         '  AccessorOptions,',
         '  AccessorRequestDescriptor,',
+        '  AccessorSchemaMetadata,',
         '  AccessorSender,',
         '  AccessorSenderInterface,',
         '  AccessorSenderInterfaceWithContext,',
         '  AccessorSenderWithContext,',
+        '  CustomJsonSerializerOptions,',
+        '  CustomJsonSerializerResult,',
         '  create_CreateItem_accessor,',
         '  create_DeleteItem_accessor,',
+        '  createCustomJsonSerializer,',
         '  createFetchSender,',
         '  modestaDefaultSerializers,',
         '  modestaProjectResponse,',
@@ -800,6 +812,36 @@ describe('operation definition generation', () => {
         'create_DeleteItem_accessor(fetchSenderWithOptions);',
         '// @ts-expect-error accessor factories no longer accept interface context arguments',
         "create_DeleteItem_accessor(fetchSender, 'trace-42');",
+        '',
+        'const customJsonResult: CustomJsonSerializerResult = { result: undefined };',
+        'const customJsonOptions: CustomJsonSerializerOptions = {',
+        '  trySerialize: (value, format, ref) => {',
+        '    format;',
+        '    ref.result = value;',
+        '    return false;',
+        '  },',
+        '  tryDeserialize: (value, format, ref) => {',
+        '    format;',
+        '    ref.result = value;',
+        '    return false;',
+        '  },',
+        '};',
+        "customJsonOptions.trySerialize(undefined, 'date-time', customJsonResult);",
+        'const customJsonSerializer = createCustomJsonSerializer(customJsonOptions);',
+        'const customJsonMetadata: AccessorSchemaMetadata = {',
+        '  properties: {',
+        "    value: { format: 'date-time' },",
+        '  },',
+        '};',
+        'customJsonSerializer.serialize({ value: undefined }, customJsonMetadata);',
+        'const customSerializerSender: AccessorSenderInterface = {',
+        "  serializers: new Map([['application/json', customJsonSerializer]]),",
+        '  send: async <TResponse>(',
+        '    _request: AccessorRequestDescriptor,',
+        '    _options: AccessorOptions | undefined',
+        "  ): Promise<TResponse> => 'ok' as unknown as TResponse,",
+        '};',
+        'create_CreateItem_accessor(customSerializerSender);',
         '',
       ].join('\n'),
     });
@@ -1029,6 +1071,94 @@ describe('operation definition generation', () => {
       )
     ).resolves.toBeUndefined();
     expect(emptyText).not.toHaveBeenCalled();
+  });
+
+  it('provides a custom JSON serializer hook helper', () => {
+    const date = new Date('2024-01-02T03:04:05.000Z');
+    const metadata = {
+      properties: {
+        nested: {
+          properties: {
+            recordedAt: {
+              format: 'date-time',
+            },
+          },
+        },
+      },
+    };
+    const trySerialize = vi.fn(
+      (
+        value: unknown,
+        format: string | undefined,
+        ref: { result: unknown }
+      ) => {
+        if (format === 'date-time' && value instanceof Date) {
+          ref.result = value.toISOString();
+          return true;
+        }
+        return false;
+      }
+    );
+    const tryDeserialize = vi.fn(
+      (
+        value: unknown,
+        format: string | undefined,
+        ref: { result: unknown }
+      ) => {
+        if (format === 'date-time' && typeof value === 'string') {
+          ref.result = new Date(value);
+          return true;
+        }
+        return false;
+      }
+    );
+    const serializer = generatedModule.createCustomJsonSerializer({
+      tryDeserialize,
+      trySerialize,
+    });
+
+    const serialized = serializer.serialize(
+      {
+        nested: {
+          recordedAt: date,
+        },
+        value: 'alpha',
+      },
+      metadata
+    );
+
+    expect(serializer.payloadType).toBe('string');
+    expect(serialized).toBe(
+      JSON.stringify({
+        nested: {
+          recordedAt: '2024-01-02T03:04:05.000Z',
+        },
+        value: 'alpha',
+      })
+    );
+    expect(trySerialize).toHaveBeenCalledWith(
+      date,
+      'date-time',
+      expect.any(Object)
+    );
+
+    const deserialized = serializer.deserialize(serialized, metadata) as {
+      nested: {
+        recordedAt: Date;
+      };
+      value: string;
+    };
+
+    expect(deserialized.value).toBe('alpha');
+    expect(deserialized.nested.recordedAt).toBeInstanceOf(Date);
+    expect(deserialized.nested.recordedAt.toISOString()).toBe(
+      '2024-01-02T03:04:05.000Z'
+    );
+    expect(tryDeserialize).toHaveBeenCalledWith(
+      '2024-01-02T03:04:05.000Z',
+      'date-time',
+      expect.any(Object)
+    );
   });
 
   it('provides a fetch-based sender helper', async () => {
@@ -1657,6 +1787,12 @@ describe('operation definition generation', () => {
           'content-type': 'application/json',
         },
         body: [1, 2, 3],
+        requestBodyMetadata: {
+          items: {
+            format: 'int32',
+          },
+        },
+        responseContentType: undefined,
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -1695,6 +1831,12 @@ describe('operation definition generation', () => {
           'content-type': 'application/json',
         },
         body: [1, 2, 3],
+        requestBodyMetadata: {
+          items: {
+            format: 'int32',
+          },
+        },
+        responseContentType: undefined,
         responseHeaders: [],
         wrapResponseBody: false,
       },

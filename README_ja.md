@@ -512,6 +512,89 @@ Swaggerのスキーマは、おおむね次のようにTypeScriptへ変換され
 
 ---
 
+## カスタムシリアライザ (Advanced topic)
+
+modestaには、Swaggerから出力される値を、独自のルールで変換・逆変換するような、変換マッピングとカスタムシリアライザの実装を容易にするヘルパー定義があります。
+
+例えば、Swaggerから、日時を示す `date-time` のような `format` 属性が出力された場合に、デフォルトのままでは恐らくは単なる文字列としてしか扱えません。
+変換マッピングとカスタムシリアライザを記述することで、このようなSwagger定義を自動的に `Date` オブジェクトに変換することが出来ます。
+
+### 型変換マッピング
+
+生成されるTypeScript型を変換したい場合は、コード生成時に `formatTypeMappings` を指定します。
+以下に、Viteプラグインでの指定例を示します:
+
+```typescript
+import { defineConfig } from 'vite';
+import modesta from 'modesta/vite';
+
+export default defineConfig({
+  plugins: [
+    modesta({
+      source: './swagger.json',
+      // modesta変換時に型をマッピングする
+      formatTypeMappings: {
+        'date-time': 'Date',
+      },
+    }),
+  ],
+});
+```
+
+この指定により、`type: "string", format: "date-time"` のフィールドは、生成型上では `Date` として出力されます。
+`dayjs` を使用する場合は、例えば `'import("dayjs").Dayjs'` のような型式を指定できます。
+
+注意: `formatTypeMappings` は生成型を変更するだけで、実行時変換は行いません。
+そのため、`date-time` を `Date` として出力する場合は、カスタムシリアライザも同じ方針で値を変換する必要があります（次節を参照）。
+
+### 実行時の型変換
+
+実行時の変換は、自力でカスタムシリアライザを最初から記述することも出来ますが、
+ペイロードの形式がJSON(`application/json`)の場合は、 `createCustomJsonSerializer()` を使用することで、比較的簡単に実装できます:
+
+```typescript
+import {
+  createFetchSender,
+  createCustomJsonSerializer,
+} from './generated/accessors';
+
+// カスタムJSONシリアライザを生成する
+const jsonSerializer = createCustomJsonSerializer({
+  // TypeScript(JavaScript)値をJSONに変換する
+  trySerialize: (value, format, ref) => {
+    // Swagger format属性が 'date-time' でかつ値がDateオブジェクトなら
+    if (format === 'date-time' && value instanceof Date) {
+      // ISO形式の文字列に変換
+      ref.result = value.toISOString();
+      return true;
+    }
+    // それ以外は通常の変換を行う
+    return false;
+  },
+  // JSONをTypeScript(JavaScript)値に変換する
+  tryDeserialize: (value, format, ref) => {
+    // Swagger format属性が 'date-time' でかつペイロードが文字列なら（念の為）
+    if (format === 'date-time' && typeof value === 'string') {
+      // 文字列からDateオブジェクトを生成
+      ref.result = new Date(value);
+      return true;
+    }
+    // それ以外は通常の変換を行う
+    return false;
+  },
+});
+
+// カスタムシリアライザを指定してSender関数を生成
+const sender = createFetchSender({
+  // application/jsonをカスタムシリアライザにマッピング
+  serializers: new Map([
+    ['application/json', jsonSerializer]
+  ]),
+});
+```
+
+---
+
 ## ライブラリとして使う (Advanced topic)
 
 modestaをライブラリとして使用する場合は、`loadOpenApiDocumentFromFile`, `generateAccessorSourceFromFile`, `generateAccessorSource` などの公開APIを使用します。

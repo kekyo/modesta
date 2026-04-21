@@ -123,6 +123,7 @@ export interface OperationNamingDraft {
 export interface OpenApiContext {
   componentSchemas: JsonRecord;
   document: JsonRecord;
+  formatTypeMappings: Readonly<Record<string, string>> | undefined;
   naming: NamingContext;
   warningSink: ((message: string) => void) | undefined;
 }

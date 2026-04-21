@@ -746,7 +746,6 @@ describe('operation definition generation', () => {
         '  AccessorSenderInterface,',
         '  AccessorSenderInterfaceWithContext,',
         '  AccessorSenderWithContext,',
-        '  CustomJsonSerializerContext,',
         '  CustomJsonSerializerOptions,',
         '  CustomJsonSerializerResult,',
         '  create_CreateItem_accessor,',
@@ -815,23 +814,19 @@ describe('operation definition generation', () => {
         "create_DeleteItem_accessor(fetchSender, 'trace-42');",
         '',
         'const customJsonResult: CustomJsonSerializerResult = { result: undefined };',
-        'const customJsonContext: CustomJsonSerializerContext = {',
-        "  format: 'date-time',",
-        "  metadata: { format: 'date-time' },",
-        '};',
         'const customJsonOptions: CustomJsonSerializerOptions = {',
-        '  trySerialize: (value, context, ref) => {',
-        '    context.format;',
+        '  trySerialize: (value, format, ref) => {',
+        '    format;',
         '    ref.result = value;',
         '    return false;',
         '  },',
-        '  tryDeserialize: (value, context, ref) => {',
-        '    context.metadata;',
+        '  tryDeserialize: (value, format, ref) => {',
+        '    format;',
         '    ref.result = value;',
         '    return false;',
         '  },',
         '};',
-        'customJsonOptions.trySerialize(undefined, customJsonContext, customJsonResult);',
+        "customJsonOptions.trySerialize(undefined, 'date-time', customJsonResult);",
         'const customJsonSerializer = createCustomJsonSerializer(customJsonOptions);',
         'const customJsonMetadata: AccessorSchemaMetadata = {',
         '  properties: {',
@@ -1094,10 +1089,10 @@ describe('operation definition generation', () => {
     const trySerialize = vi.fn(
       (
         value: unknown,
-        context: { format: string | undefined },
+        format: string | undefined,
         ref: { result: unknown }
       ) => {
-        if (context.format === 'date-time' && value instanceof Date) {
+        if (format === 'date-time' && value instanceof Date) {
           ref.result = value.toISOString();
           return true;
         }
@@ -1107,10 +1102,10 @@ describe('operation definition generation', () => {
     const tryDeserialize = vi.fn(
       (
         value: unknown,
-        context: { format: string | undefined },
+        format: string | undefined,
         ref: { result: unknown }
       ) => {
-        if (context.format === 'date-time' && typeof value === 'string') {
+        if (format === 'date-time' && typeof value === 'string') {
           ref.result = new Date(value);
           return true;
         }
@@ -1143,9 +1138,7 @@ describe('operation definition generation', () => {
     );
     expect(trySerialize).toHaveBeenCalledWith(
       date,
-      expect.objectContaining({
-        format: 'date-time',
-      }),
+      'date-time',
       expect.any(Object)
     );
 
@@ -1163,9 +1156,7 @@ describe('operation definition generation', () => {
     );
     expect(tryDeserialize).toHaveBeenCalledWith(
       '2024-01-02T03:04:05.000Z',
-      expect.objectContaining({
-        format: 'date-time',
-      }),
+      'date-time',
       expect.any(Object)
     );
   });

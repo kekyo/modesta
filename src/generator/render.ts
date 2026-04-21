@@ -1602,6 +1602,19 @@ const renderAllOfTypeExpression = (
   return expressions.join(' & ');
 };
 
+const getFormatTypeExpression = (
+  context: OpenApiContext,
+  schema: JsonRecord
+) => {
+  const format = getString(schema, 'format');
+  if (format == null) {
+    return undefined;
+  }
+
+  const mapped = context.formatTypeMappings?.[format];
+  return mapped != null && mapped.length > 0 ? mapped : undefined;
+};
+
 const renderTypeExpression = (
   context: OpenApiContext,
   schema: JsonRecord,
@@ -1638,16 +1651,17 @@ const renderTypeExpression = (
     coreType = renderEnumType(asArray(schema.enum)!);
   } else {
     const typeName = getString(schema, 'type');
+    const formatTypeExpression = getFormatTypeExpression(context, schema);
     switch (typeName) {
       case 'string':
-        coreType = 'string';
+        coreType = formatTypeExpression ?? 'string';
         break;
       case 'number':
       case 'integer':
-        coreType = 'number';
+        coreType = formatTypeExpression ?? 'number';
         break;
       case 'boolean':
-        coreType = 'boolean';
+        coreType = formatTypeExpression ?? 'boolean';
         break;
       case 'array':
         coreType = `ReadonlyArray<${renderTypeExpression(

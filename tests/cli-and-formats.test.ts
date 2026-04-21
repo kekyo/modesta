@@ -19,6 +19,7 @@ import {
 } from '../src/generator';
 import {
   fetchSwaggerJsonFromProject,
+  getTypeScriptDiagnostics,
   runCommand,
   runCommandAllowFailure,
   runModestaCli,
@@ -181,15 +182,72 @@ describe('CLI and format support', () => {
     expect(lookupRequestMetadata).not.toContain('ids:');
   });
 
+  it('maps formatted schemas to configured TypeScript types', async () => {
+    const dateMappedSource = generateAccessorSource({
+      document: swaggerJson,
+      formatTypeMappings: {
+        'date-time': 'Date',
+      },
+      source: 'swagger.json',
+    });
+
+    expect(dateMappedSource).toContain('recordedAt: Date;');
+    expect(dateMappedSource).toContain('requestedAt: Date;');
+    expect(dateMappedSource).toContain('milestones: ReadonlyArray<Date>;');
+    expect(dateMappedSource).toContain('[key: string]: Date;');
+    expect(dateMappedSource).not.toContain('recordedAt: string;');
+
+    const dayjsMappedSource = generateAccessorSource({
+      document: swaggerJson,
+      formatTypeMappings: {
+        'date-time': 'import("dayjs").Dayjs',
+      },
+      source: 'swagger.json',
+    });
+    const diagnostics = await getTypeScriptDiagnostics({
+      'consumer.ts': [
+        "import type { Dayjs } from 'dayjs';",
+        "import type { LookupRequest } from './generated.ts';",
+        '',
+        'declare const instant: Dayjs;',
+        'const request: LookupRequest = {',
+        '  anchor: {',
+        "    id: 'alpha',",
+        '    recordedAt: instant,',
+        '  },',
+        "  ids: ['alpha'],",
+        '  milestones: [instant],',
+        '  requestedAt: instant,',
+        '  windows: {',
+        '    start: instant,',
+        '  },',
+        '};',
+        'request.anchor.recordedAt.toISOString();',
+      ].join('\n'),
+      'generated.ts': dayjsMappedSource,
+      'node_modules/dayjs/index.d.ts': [
+        "declare module 'dayjs' {",
+        '  export interface Dayjs {',
+        '    toISOString(): string;',
+        '  }',
+        '  const dayjs: () => Dayjs;',
+        '  export default dayjs;',
+        '}',
+      ].join('\n'),
+    });
+
+    expect(diagnostics).toEqual([]);
+  });
+
   it('passes format metadata to user-land Date and Dayjs serializers', async () => {
     const serializers = new Map<string, any>();
     const trySerialize = vi.fn(
       (
         value: unknown,
-        context: { format: string | undefined },
+        format: string | undefined,
         ref: { result: unknown }
       ) => {
-        if (context.format !== 'date-time') {
+        if (format !== 'date-time') {
           return false;
         }
         if (value instanceof Date) {
@@ -206,10 +264,10 @@ describe('CLI and format support', () => {
     const tryDeserialize = vi.fn(
       (
         value: unknown,
-        context: { format: string | undefined },
+        format: string | undefined,
         ref: { result: unknown }
       ) => {
-        if (context.format === 'date-time' && typeof value === 'string') {
+        if (format === 'date-time' && typeof value === 'string') {
           ref.result = dayjs(value);
           return true;
         }
@@ -338,16 +396,12 @@ describe('CLI and format support', () => {
     );
     expect(trySerialize).toHaveBeenCalledWith(
       expect.any(Date),
-      expect.objectContaining({
-        format: 'date-time',
-      }),
+      'date-time',
       expect.any(Object)
     );
     expect(tryDeserialize).toHaveBeenCalledWith(
       '2024-03-03T04:05:06.000Z',
-      expect.objectContaining({
-        format: 'date-time',
-      }),
+      'date-time',
       expect.any(Object)
     );
   });
@@ -587,6 +641,9 @@ describe('CLI and format support', () => {
         source: new URL(inputUrl),
       });
       const generatedFromFile = await generateAccessorSourceFromFile({
+        formatTypeMappings: {
+          'date-time': 'Date',
+        },
         insecure: true,
         source: inputUrl,
       });
@@ -613,6 +670,7 @@ describe('CLI and format support', () => {
       expect(generatedFromFile).toContain(
         `// Source file: ${expectedSourceFileDisplay(inputUrl)}`
       );
+      expect(generatedFromFile).toContain('recordedAt: Date;');
       expect(generatedFromCli).toContain(
         `// Source file: ${expectedSourceFileDisplay(inputUrl)}`
       );

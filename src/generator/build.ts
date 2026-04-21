@@ -3,7 +3,11 @@
 // Under MIT.
 // https://github.com/kekyo/modesta/
 
-import { GenerateAccessorWarningSink, JsonRecord } from '../types';
+import {
+  FormatTypeMappings,
+  GenerateAccessorWarningSink,
+  JsonRecord,
+} from '../types';
 import { asArray, asRecord, getBoolean, getRecord, getString } from '../util';
 import {
   ApiDefinition,
@@ -18,7 +22,8 @@ import { mergeParameters, resolveParameters } from './resolve';
 
 export const createOpenApiContext = (
   document: JsonRecord,
-  warningSink: GenerateAccessorWarningSink | undefined = undefined
+  warningSink: GenerateAccessorWarningSink | undefined = undefined,
+  formatTypeMappings: FormatTypeMappings | undefined = undefined
 ): OpenApiContext => {
   const components = getRecord(document, 'components') ?? {};
   const componentSchemas = getRecord(components, 'schemas') ?? {};
@@ -27,6 +32,7 @@ export const createOpenApiContext = (
   return {
     componentSchemas,
     document,
+    formatTypeMappings,
     naming,
     warningSink,
   };

@@ -3,7 +3,7 @@
 // Under MIT.
 // https://github.com/kekyo/modesta/
 
-import { OpenApiSource } from './types';
+import { FormatTypeMappings, OpenApiSource } from './types';
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -37,6 +37,11 @@ export interface ModestaPluginOptions {
    * @default `src/generated/modesta_proxy.ts`
    */
   outputPath?: string | undefined;
+  /**
+   * TypeScript type expressions used for schemas with matching OpenAPI
+   * `format` values.
+   */
+  formatTypeMappings?: FormatTypeMappings | undefined;
 }
 
 /**
@@ -63,4 +68,9 @@ export interface ResolvedModestaPluginOptions {
    * Whether TLS certificate verification is disabled for remote `https` URLs.
    */
   insecure: boolean;
+  /**
+   * TypeScript type expressions used for schemas with matching OpenAPI
+   * `format` values.
+   */
+  formatTypeMappings: FormatTypeMappings | undefined;
 }

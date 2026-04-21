@@ -173,6 +173,7 @@ export const generateAccessorSourceFromFile = async (
   const document = await loadOpenApiDocumentFromFile(options);
   return generateAccessorSource({
     document,
+    formatTypeMappings: options.formatTypeMappings,
     source: options.source,
     warningSink: options.warningSink,
   });
@@ -196,7 +197,11 @@ export const generateAccessorSource = (
       ? parseOpenApiDocument(options.document, source)
       : options.document;
 
-  const context = createOpenApiContext(document, options.warningSink);
+  const context = createOpenApiContext(
+    document,
+    options.warningSink,
+    options.formatTypeMappings
+  );
   const api = buildApiDefinition(context, source);
 
   return renderApiDefinition(api, context);

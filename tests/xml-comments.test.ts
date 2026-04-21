@@ -279,10 +279,6 @@ describe('xml comments integration', () => {
       generatedSource,
       'CustomJsonSerializerResult'
     );
-    const customJsonSerializerContextBlock = getInterfaceBlock(
-      generatedSource,
-      'CustomJsonSerializerContext'
-    );
     const customJsonSerializerOptionsBlock = getInterfaceBlock(
       generatedSource,
       'CustomJsonSerializerOptions'
@@ -499,25 +495,6 @@ describe('xml comments integration', () => {
       '/** Converted value returned from a hook when the hook reports that it handled the input. */'
     );
     expect(
-      getInterfaceDocumentation(generatedSource, 'CustomJsonSerializerContext')
-    ).toBe(
-      [
-        '/**',
-        ' * Current schema context passed to custom JSON conversion hooks.',
-        ' */',
-      ].join('\n')
-    );
-    expectMemberDocumentation(
-      customJsonSerializerContextBlock,
-      'format',
-      '/** OpenAPI schema format for the current value. */'
-    );
-    expectMemberDocumentation(
-      customJsonSerializerContextBlock,
-      'metadata',
-      '/** Schema metadata for the current value. */'
-    );
-    expect(
       getInterfaceDocumentation(generatedSource, 'CustomJsonSerializerOptions')
     ).toBe(
       [
@@ -533,7 +510,7 @@ describe('xml comments integration', () => {
         '/**',
         '   * Tries to convert a body value before JSON serialization.',
         '   * @param value Candidate value.',
-        '   * @param context Current schema context for the candidate value.',
+        '   * @param format OpenAPI schema format for the candidate value.',
         '   * @param ref Result holder that receives the converted value.',
         '   * @returns true when the hook handled the value; otherwise false.',
         '   */',
@@ -546,7 +523,7 @@ describe('xml comments integration', () => {
         '/**',
         '   * Tries to convert a parsed JSON value after JSON deserialization.',
         '   * @param value Candidate parsed JSON value.',
-        '   * @param context Current schema context for the candidate value.',
+        '   * @param format OpenAPI schema format for the candidate value.',
         '   * @param ref Result holder that receives the converted value.',
         '   * @returns true when the hook handled the value; otherwise false.',
         '   */',

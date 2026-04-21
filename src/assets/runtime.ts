@@ -715,51 +715,34 @@ export interface CustomJsonSerializerResult {
 }
 
 /**
- * Current schema context passed to custom JSON conversion hooks.
- */
-export interface CustomJsonSerializerContext {
-  /** OpenAPI schema format for the current value. */
-  readonly format: string | undefined;
-  /** Schema metadata for the current value. */
-  readonly metadata: AccessorSchemaMetadata | undefined;
-}
-
-/**
  * Options that configure custom JSON value conversions.
  */
 export interface CustomJsonSerializerOptions {
   /**
    * Tries to convert a body value before JSON serialization.
    * @param value Candidate value.
-   * @param context Current schema context for the candidate value.
+   * @param format OpenAPI schema format for the candidate value.
    * @param ref Result holder that receives the converted value.
    * @returns true when the hook handled the value; otherwise false.
    */
   readonly trySerialize: (
     value: unknown,
-    context: CustomJsonSerializerContext,
+    format: string | undefined,
     ref: CustomJsonSerializerResult
   ) => boolean;
   /**
    * Tries to convert a parsed JSON value after JSON deserialization.
    * @param value Candidate parsed JSON value.
-   * @param context Current schema context for the candidate value.
+   * @param format OpenAPI schema format for the candidate value.
    * @param ref Result holder that receives the converted value.
    * @returns true when the hook handled the value; otherwise false.
    */
   readonly tryDeserialize: (
     value: unknown,
-    context: CustomJsonSerializerContext,
+    format: string | undefined,
     ref: CustomJsonSerializerResult
   ) => boolean;
 }
-
-const modestaCreateCustomJsonSerializerContext = (
-  metadata: AccessorSchemaMetadata | undefined
-): CustomJsonSerializerContext => ({
-  format: metadata?.format,
-  metadata,
-});
 
 const modestaGetCustomJsonPropertyMetadata = (
   metadata: AccessorSchemaMetadata | undefined,
@@ -780,7 +763,7 @@ const modestaApplyCustomJsonSerialization = (
   if (
     options.trySerialize(
       value,
-      modestaCreateCustomJsonSerializerContext(metadata),
+      metadata?.format,
       scratchBuffer
     )
   ) {
@@ -863,7 +846,7 @@ const modestaApplyCustomJsonDeserialization = (
   scratchBuffer.result = undefined;
   return options.tryDeserialize(
     convertedValue,
-    modestaCreateCustomJsonSerializerContext(metadata),
+    metadata?.format,
     scratchBuffer
   )
     ? scratchBuffer.result

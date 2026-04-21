@@ -269,7 +269,7 @@ describe('xml comments integration', () => {
     );
     const senderSerializationBlock = getInterfaceBlock(
       generatedSource,
-      'AccessorSenderSerialization'
+      'AccessorSenderSerializer'
     );
     const senderInterfaceBlock = getInterfaceBlock(
       generatedSource,
@@ -335,6 +335,11 @@ describe('xml comments integration', () => {
     );
     expectMemberDocumentation(
       requestDescriptorBlock,
+      'responseContentType',
+      '/** Expected response content type selected from the OpenAPI response definition. */'
+    );
+    expectMemberDocumentation(
+      requestDescriptorBlock,
       'responseHeaders',
       '/** Response header definitions used to project the sender result. */'
     );
@@ -371,13 +376,25 @@ describe('xml comments integration', () => {
     );
 
     expect(
-      getInterfaceDocumentation(generatedSource, 'AccessorSenderSerialization')
+      getInterfaceDocumentation(generatedSource, 'AccessorSenderSerializer')
     ).toBe(
       [
         '/**',
         ' * Serialization hooks used by sender implementations.',
         ' */',
       ].join('\n')
+    );
+    expect(getTypeAliasDocumentation(generatedSource, 'PayloadType')).toBe(
+      [
+        '/**',
+        ' * Serialized transport payload data shape used by serializers.',
+        ' */',
+      ].join('\n')
+    );
+    expectMemberDocumentation(
+      senderSerializationBlock,
+      'payloadType',
+      '/** Serialized payload data shape used by this serializer. */'
     );
     expectMemberDocumentation(
       senderSerializationBlock,
@@ -412,6 +429,9 @@ describe('xml comments integration', () => {
       ].join('\n')
     );
     expect(
+      getConstDocumentation(generatedSource, 'modestaDefaultSerializers')
+    ).toBe('/** Default serializers keyed by media type. */');
+    expect(
       getTypeAliasDocumentation(generatedSource, 'AccessorSenderFunction')
     ).toBe(
       [
@@ -431,8 +451,8 @@ describe('xml comments integration', () => {
     );
     expectMemberDocumentation(
       senderInterfaceBlock,
-      'serializer',
-      '/** Serialization hooks used. */'
+      'serializers',
+      '/** Serialization hooks keyed by normalized media type. */'
     );
     expect(getTypeAliasDocumentation(generatedSource, 'AccessorSender')).toBe(
       [
@@ -468,8 +488,8 @@ describe('xml comments integration', () => {
     );
     expectMemberDocumentation(
       senderInterfaceWithContextBlock,
-      'serializer',
-      '/** Serialization hooks used. */'
+      'serializers',
+      '/** Serialization hooks keyed by normalized media type. */'
     );
     expect(
       getTypeAliasDocumentation(generatedSource, 'AccessorSenderWithContext')
@@ -510,8 +530,8 @@ describe('xml comments integration', () => {
     );
     expectMemberDocumentation(
       fetchSenderOptionsBlock,
-      'serializer',
-      '/** Serialization hooks used for JSON-compatible request and response payloads. Defaults to `modestaDefaultJsonSerializer`. */'
+      'serializers',
+      '/** Serialization hooks keyed by media type. Defaults to `modestaDefaultSerializers`. */'
     );
     expect(
       getInterfaceDocumentation(generatedSource, 'ModestaPrepareRequestOptions')
@@ -619,9 +639,9 @@ describe('xml comments integration', () => {
         '/**',
         ' * Serializes a request body using the accessor request content type.',
         ' * @param request Prepared request descriptor emitted by the generated accessor.',
-        ' * @param serializer Serialization hooks used.',
+        ' * @param serializers Serialization hooks keyed by media type.',
         ' * @returns Serialized body value for fetch-style transports, or undefined when the request has no body.',
-        ' * @remarks JSON media types are serialized with `serializer.serialize()`. Other body values are returned as-is.',
+        ' * @remarks A body is serialized when a serializer matches the request content type. Other body values are returned as-is.',
         ' */',
       ].join('\n')
     );
@@ -646,9 +666,10 @@ describe('xml comments integration', () => {
         '/**',
         ' * Reads a response body from a fetch-compatible response object.',
         ' * @param response Fetch-compatible response object.',
-        ' * @param serializer Serialization hooks.',
+        ' * @param contentType Expected response content type used when the response omits the content-type header.',
+        ' * @param serializers Serialization hooks keyed by media type.',
         ' * @returns Parsed response body value, or undefined for empty responses.',
-        ' * @remarks JSON media types are deserialized with `serializer.deserialize()`. Other bodies are read with `response.text()`.',
+        ' * @remarks A body is deserialized when a serializer matches the response content type. Other bodies are read with `response.text()`.',
         ' */',
       ].join('\n')
     );

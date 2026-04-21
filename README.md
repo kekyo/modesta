@@ -384,10 +384,11 @@ const createMyCustomSender = (): AccessorSenderWithContext<MyApiContext> => {
     });
   };
 };
+```
 
-//  :
-//  :
+Once you've defined the Sender factory, you can use it to generate and use accessors:
 
+```typescript
 // Create the custom Sender function
 const sender = createMyCustomSender();
 
@@ -418,8 +419,8 @@ const result = await summaries.get(
 - A Sender function that returns `AccessorSender` does not require an additional context value. API calls do not need to specify context either.
   `createFetchSender()` returns this interface type, so API calls do not need to specify a context value.
 - If you want stricter transport-side typing, you can still add explicit parameter annotations to the lambda and call `axios.request<TResponse>()`.
-- If a custom transport expects a serialized payload, use `modestaSerializeRequestBody(request)` for the outgoing body.
-  If you already have a fetch-compatible `Response`, `modestaReadFetchResponseBody(response)` can be combined with `modestaProjectResponse()`.
+- If a custom transport expects a serialized payload, use `modestaSerializeRequestBody(request, serializers)` for the outgoing body.
+  If you already have a fetch-compatible `Response`, `modestaReadFetchResponseBody(response, request.responseContentType, serializers)` can be combined with `modestaProjectResponse()`.
 
 ---
 

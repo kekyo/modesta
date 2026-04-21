@@ -561,6 +561,9 @@ const renderAccessorFactory = (
       )},`
     );
     push(
+      `      responseContentType: ${operation.response.accept != null ? renderLiteral(operation.response.accept) : 'undefined'},`
+    );
+    push(
       `      responseHeaders: ${renderOperationResponseHeadersExpression(
         accessorGroup,
         operation

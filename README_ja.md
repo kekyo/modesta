@@ -382,17 +382,18 @@ const createMyCustomSender = (): AccessorSenderWithContext<MyApiContext> => {
     });
   };
 };
+```
 
-//  :
-//  :
+Senderファクトリを定義したら、それを使ってアクセサを生成して使用します:
 
+```typescript
 // カスタムSender関数の生成
 const sender = createMyCustomSender();
 
 //  :
 //  :
 
-// Sender関数を指定していAPIへのアクセサを生成する
+// カスタムSender関数を指定してAPIへのアクセサを生成する
 const summaries = create_ListSummaries_accessor(sender);
 
 // アクセサ関数でAPI呼び出しを行う
@@ -416,8 +417,8 @@ const result = await summaries.get(
 - `AccessorSender` を返すSender関数は、追加のコンテキスト値を要求しません。API呼び出しでもコンテキスト値の指定が不要となります。
   `createFetchSender()` はこのインターフェイス型を返すため、API呼び出しでコンテキスト値を指定する必要がありません。
 - トランスポート層でも厳密な型指定を行いたい場合は、ラムダの引数型を明示した上で `axios.request<TResponse>()` を呼び出すこともできます。
-- 独自トランスポートがシリアライズ済み payload を要求する場合は、送信 body に `modestaSerializeRequestBody(request)` を使用することが出来ます。
-  既に fetch 互換の `Response` を扱っている場合は、`modestaReadFetchResponseBody(response)` と `modestaProjectResponse()` を組み合わせられます。
+- 独自トランスポートがシリアライズ済み payload を要求する場合は、送信 body に `modestaSerializeRequestBody(request, serializers)` を使用することが出来ます。
+  既に fetch 互換の `Response` を扱っている場合は、`modestaReadFetchResponseBody(response, request.responseContentType, serializers)` と `modestaProjectResponse()` を組み合わせられます。
 
 ---
 

@@ -437,6 +437,7 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -461,6 +462,7 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -487,6 +489,7 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -512,6 +515,7 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -539,6 +543,7 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -566,6 +571,7 @@ describe('operation definition generation', () => {
         body: {
           name: 'alpha',
         },
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -604,6 +610,7 @@ describe('operation definition generation', () => {
         body: {
           name: 'alpha',
         },
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -640,6 +647,7 @@ describe('operation definition generation', () => {
         body: {
           name: 'alpha',
         },
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -673,8 +681,13 @@ describe('operation definition generation', () => {
 
   it('emits sender interfaces and deprecated function compatibility aliases', () => {
     expect(generatedSource).toContain(
+      "export type PayloadType = 'string' | 'ArrayBuffer';"
+    );
+    expect(generatedSource).toContain(
       [
-        'export interface AccessorSenderSerialization {',
+        'export interface AccessorSenderSerializer {',
+        '  /** Serialized payload data shape used by this serializer. */',
+        '  readonly payloadType: PayloadType;',
         '  /**',
         '   * Serializes a request body value into transport data.',
         '   * @param value Target value',
@@ -727,7 +740,7 @@ describe('operation definition generation', () => {
         '  create_CreateItem_accessor,',
         '  create_DeleteItem_accessor,',
         '  createFetchSender,',
-        '  modestaDefaultJsonSerializer,',
+        '  modestaDefaultSerializers,',
         '  modestaProjectResponse,',
         "} from './generated.ts';",
         '',
@@ -749,7 +762,7 @@ describe('operation definition generation', () => {
         'create_DeleteItem_accessor(senderFromLambda);',
         '',
         'const senderFromObject: AccessorSenderInterface = {',
-        '  serializer: modestaDefaultJsonSerializer,',
+        '  serializers: modestaDefaultSerializers,',
         '  send: async <TResponse>(',
         '    _request: AccessorRequestDescriptor,',
         '    _options: AccessorOptions | undefined',
@@ -770,7 +783,7 @@ describe('operation definition generation', () => {
         "create_CreateItem_accessor(senderWithContext, 'trace-42');",
         '',
         'const senderWithContextFromObject: AccessorSenderInterfaceWithContext<{ requestId: string }> = {',
-        '  serializer: modestaDefaultJsonSerializer,',
+        '  serializers: modestaDefaultSerializers,',
         '  send: async <TResponse>(',
         '    _request: AccessorRequestDescriptor,',
         '    options: AccessorOptionsWithContext<{ requestId: string }>',
@@ -837,18 +850,22 @@ describe('operation definition generation', () => {
     expect(
       generatedModule.modestaSerializeRequestBody(
         request,
-        generatedModule.modestaDefaultJsonSerializer
+        generatedModule.modestaDefaultSerializers
       )
     ).toBe(JSON.stringify(requestBody));
 
     const customSerializer = {
       deserialize: vi.fn(),
+      payloadType: 'string',
       serialize: vi.fn((value: unknown) => ({
         encoded: value,
       })),
     };
     expect(
-      generatedModule.modestaSerializeRequestBody(request, customSerializer)
+      generatedModule.modestaSerializeRequestBody(
+        request,
+        new Map([['application/json', customSerializer]])
+      )
     ).toEqual({
       encoded: requestBody,
     });
@@ -946,6 +963,7 @@ describe('operation definition generation', () => {
     const responseText = JSON.stringify(responseBody);
     const serializer = {
       deserialize: vi.fn((data: unknown) => JSON.parse(String(data))),
+      payloadType: 'string',
       serialize: vi.fn(),
     };
     const text = vi.fn(async () => responseText);
@@ -960,21 +978,55 @@ describe('operation definition generation', () => {
           },
           text,
         },
-        serializer
+        'application/json',
+        new Map([['application/json', serializer]])
       )
     ).resolves.toEqual(responseBody);
     expect(text).toHaveBeenCalledTimes(1);
     expect(serializer.deserialize).toHaveBeenCalledWith(responseText);
 
+    const responsePayload = new ArrayBuffer(4);
+    const arrayBufferSerializer = {
+      deserialize: vi.fn((data: unknown) => data),
+      payloadType: 'ArrayBuffer',
+      serialize: vi.fn(),
+    };
+    const arrayBuffer = vi.fn(async () => responsePayload);
+    const unusedText = vi.fn(async () => 'ignored');
+    await expect(
+      generatedModule.modestaReadFetchResponseBody(
+        {
+          status: 200,
+          headers: {
+            get: (name: string) =>
+              name === 'content-type' ? 'application/octet-stream' : null,
+          },
+          arrayBuffer,
+          text: unusedText,
+        },
+        undefined,
+        new Map([['application/octet-stream', arrayBufferSerializer]])
+      )
+    ).resolves.toBe(responsePayload);
+    expect(arrayBuffer).toHaveBeenCalledTimes(1);
+    expect(unusedText).not.toHaveBeenCalled();
+    expect(arrayBufferSerializer.deserialize).toHaveBeenCalledWith(
+      responsePayload
+    );
+
     const emptyText = vi.fn(async () => 'ignored');
     await expect(
-      generatedModule.modestaReadFetchResponseBody({
-        status: 204,
-        headers: {
-          get: () => null,
+      generatedModule.modestaReadFetchResponseBody(
+        {
+          status: 204,
+          headers: {
+            get: () => null,
+          },
+          text: emptyText,
         },
-        text: emptyText,
-      })
+        undefined,
+        generatedModule.modestaDefaultSerializers
+      )
     ).resolves.toBeUndefined();
     expect(emptyText).not.toHaveBeenCalled();
   });
@@ -1037,6 +1089,96 @@ describe('operation definition generation', () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(1);
     expect(json).toHaveBeenCalledTimes(1);
     expect(text).not.toHaveBeenCalled();
+  });
+
+  it('uses the generated response content type when fetch omits the response header', async () => {
+    const json = vi.fn(async () => ({ id: '42', source: 'route' }));
+    const fetchImplementation = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: {
+        get: () => null,
+      },
+      json,
+      text: async () => JSON.stringify(await json()),
+    }));
+    const sender = generatedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: fetchImplementation,
+    });
+    const accessor = generatedModule.create_GetRouteValue_accessor(sender);
+
+    await expect(
+      accessor.get({
+        id: '42',
+      })
+    ).resolves.toEqual({
+      id: '42',
+      source: 'route',
+    });
+
+    expect(json).toHaveBeenCalledTimes(1);
+  });
+
+  it('selects custom fetch serializers by normalized content type', async () => {
+    const textSerializer = {
+      deserialize: vi.fn((payloadData: unknown) => ({
+        decoded: String(payloadData),
+      })),
+      payloadType: 'string',
+      serialize: vi.fn((value: unknown) => `encoded:${String(value)}`),
+    };
+    const fetchImplementation = vi.fn(
+      async (input: URL, init?: RequestInit) => {
+        if (String(input) === 'https://api.example.com/text/tenant') {
+          expect(init?.body).toBe('encoded:payload');
+          return {
+            ok: true,
+            status: 204,
+            statusText: 'No Content',
+            headers: {
+              get: () => null,
+            },
+            text: async () => '',
+          };
+        }
+
+        expect(String(input)).toBe('https://api.example.com/plain-message');
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: {
+            get: (name: string) =>
+              name === 'content-type' ? 'text/plain; charset=utf-8' : null,
+          },
+          text: async () => 'hello',
+        };
+      }
+    );
+    const sender = edgeCaseGeneratedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: fetchImplementation,
+      serializers: new Map([['Text/Plain; charset=utf-8', textSerializer]]),
+    });
+    const textRequestAccessor =
+      edgeCaseGeneratedModule.create_CreateScopedText_accessor(sender);
+    const textResponseAccessor =
+      edgeCaseGeneratedModule.create_GetPlainMessage_accessor(sender);
+
+    await expect(
+      textRequestAccessor.post({
+        body: 'payload',
+        scope: 'tenant',
+      })
+    ).resolves.toBeUndefined();
+    await expect(textResponseAccessor.get()).resolves.toEqual({
+      decoded: 'hello',
+    });
+
+    expect(textSerializer.serialize).toHaveBeenCalledWith('payload');
+    expect(textSerializer.deserialize).toHaveBeenCalledWith('hello');
   });
 
   it('uses the current origin for fetch-based sender when baseUrl is omitted', async () => {
@@ -1241,6 +1383,7 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -1287,6 +1430,7 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -1328,6 +1472,7 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -1388,6 +1533,7 @@ describe('operation definition generation', () => {
           xApiKey: 'body-key',
           name: 'alpha',
         },
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -1619,6 +1765,7 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },

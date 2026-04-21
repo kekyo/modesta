@@ -14,6 +14,8 @@ export interface AccessorRequestDescriptor {
   readonly headers: Record<string, string>;
   /** Request body payload passed to the sender. */
   readonly body: unknown;
+  /** Expected response content type selected from the OpenAPI response definition. */
+  readonly responseContentType: string | undefined;
   /** Response header definitions used to project the sender result. */
   readonly responseHeaders: readonly AccessorResponseHeaderDescriptor[];
   /** Indicates that primitive or array response bodies must be exposed through a `body` member when response headers are also defined. */
@@ -57,9 +59,16 @@ export interface AccessorOptionsWithContext<TAccessorContext>
 }
 
 /**
+ * Serialized transport payload data shape used by serializers.
+ */
+export type PayloadType = 'string' | 'ArrayBuffer';
+
+/**
  * Serialization hooks used by sender implementations.
  */
-export interface AccessorSenderSerialization {
+export interface AccessorSenderSerializer {
+  /** Serialized payload data shape used by this serializer. */
+  readonly payloadType: PayloadType;
   /**
    * Serializes a request body value into transport data.
    * @param value Target value
@@ -85,8 +94,8 @@ export type AccessorSenderFunction = <TResponse>(
  * Sender object used by generated accessors that do not require per-call context values.
  */
 export interface AccessorSenderInterface {
-  /** Serialization hooks used. */
-  readonly serializer: AccessorSenderSerialization;
+  /** Serialization hooks keyed by normalized media type. */
+  readonly serializers: ReadonlyMap<string, AccessorSenderSerializer>;
   /**
    * Executes a prepared request.
    * @typeParam TResponse Response payload type.
@@ -116,8 +125,8 @@ export type AccessorSenderFunctionWithContext<TAccessorContext> = <TResponse>(
  * @typeParam TAccessorContext Per-call context value type passed to the sender.
  */
 export interface AccessorSenderInterfaceWithContext<TAccessorContext> {
-  /** Serialization hooks used. */
-  readonly serializer: AccessorSenderSerialization;
+  /** Serialization hooks keyed by normalized media type. */
+  readonly serializers: ReadonlyMap<string, AccessorSenderSerializer>;
   /**
    * Executes a prepared request.
    * @typeParam TResponse Response payload type.
@@ -148,8 +157,8 @@ export interface CreateFetchSenderOptions {
   readonly headers?: Record<string, string> | undefined;
   /** Additional RequestInit values merged into every request. Generated accessors continue to control body, headers, method, and signal. */
   readonly init?: Omit<RequestInit, 'body' | 'headers' | 'method' | 'signal'> | undefined;
-  /** Serialization hooks used for JSON-compatible request and response payloads. Defaults to `modestaDefaultJsonSerializer`. */
-  readonly serializer?: AccessorSenderSerialization | undefined;
+  /** Serialization hooks keyed by media type. Defaults to `modestaDefaultSerializers`. */
+  readonly serializers?: ReadonlyMap<string, AccessorSenderSerializer> | undefined;
 }
 
 /**
@@ -190,7 +199,6 @@ export interface ModestaResponseSource {
 
 /////////////////////////////////////////////////////////////////////////////////
 
-const modestaJsonMediaTypePattern = /json/i;
 const modestaEmptyResponseHeaders: readonly AccessorResponseHeaderDescriptor[] = [];
 
 const modestaEncodeQueryComponent = (value: string) =>
@@ -257,17 +265,61 @@ const modestaBuildHeaders = (
   return headers;
 };
 
-const modestaSerializeFetchBody = (
-  body: any,
-  contentType: string | undefined,
-  serializer: AccessorSenderSerialization
-) => {
-  if (body == null) {
+const modestaNormalizeMediaType = (contentType: string | undefined) => {
+  if (contentType == null) {
     return undefined;
   }
-  return contentType != null && modestaJsonMediaTypePattern.test(contentType)
-    ? serializer.serialize(body)
-    : body;
+
+  const mediaTypeDelimiter = contentType.indexOf(';');
+  const mediaType = (
+    mediaTypeDelimiter >= 0
+      ? contentType.slice(0, mediaTypeDelimiter)
+      : contentType
+  )
+    .trim()
+    .toLowerCase();
+  return mediaType.length > 0 ? mediaType : undefined;
+};
+
+const modestaFindSerializer = (
+  serializers: ReadonlyMap<string, AccessorSenderSerializer>,
+  contentType: string | undefined
+) => {
+  const mediaType = modestaNormalizeMediaType(contentType);
+  if (!mediaType) {
+    return undefined;
+  }
+
+  return (
+    serializers.get(mediaType) ??
+    (mediaType.endsWith('+json') ? serializers.get('application/json') : undefined)
+  );
+};
+
+const modestaSerializeFetchBody = (
+  body: unknown,
+  contentType: string | undefined,
+  serializers: ReadonlyMap<string, AccessorSenderSerializer>
+) => {
+  const serializer = modestaFindSerializer(serializers, contentType);
+  return serializer != null ? serializer.serialize(body) : body;
+};
+
+const modestaCreateSerializers = (
+  serializers: ReadonlyMap<string, AccessorSenderSerializer> | undefined
+): ReadonlyMap<string, AccessorSenderSerializer> => {
+  if (serializers == null) {
+    return modestaDefaultSerializers;
+  }
+
+  const resolvedSerializers = new Map(modestaDefaultSerializers);
+  serializers.forEach((serializer, contentType) => {
+    const mediaType = modestaNormalizeMediaType(contentType);
+    if (mediaType != null) {
+      resolvedSerializers.set(mediaType, serializer);
+    }
+  });
+  return resolvedSerializers;
 };
 
 const modestaHasPropertyName = (
@@ -514,10 +566,16 @@ const modestaSend = <TResponse>(
  * Default JSON serializer.
  * @remarks It is a facade that `JSON` object.
  */
-export const modestaDefaultJsonSerializer: AccessorSenderSerialization = {
-  serialize: (value: unknown) => JSON.stringify(value),
+export const modestaDefaultJsonSerializer: AccessorSenderSerializer = {
+  payloadType: 'string',
+  serialize: (value: unknown) => !!value ? JSON.stringify(value) : undefined,
   deserialize: (payloadData: unknown) => JSON.parse(String(payloadData)),
 };
+
+/** Default serializers keyed by media type. */
+export const modestaDefaultSerializers: ReadonlyMap<string, AccessorSenderSerializer> = new Map([
+  ['application/json', modestaDefaultJsonSerializer],
+]);
 
 /**
  * Prepares transport-neutral request values for a sender implementation.
@@ -542,18 +600,18 @@ export const modestaPrepareRequest = (
 /**
  * Serializes a request body using the accessor request content type.
  * @param request Prepared request descriptor emitted by the generated accessor.
- * @param serializer Serialization hooks used.
+ * @param serializers Serialization hooks keyed by media type.
  * @returns Serialized body value for fetch-style transports, or undefined when the request has no body.
- * @remarks JSON media types are serialized with `serializer.serialize()`. Other body values are returned as-is.
+ * @remarks A body is serialized when a serializer matches the request content type. Other body values are returned as-is.
  */
 export const modestaSerializeRequestBody = (
   request: AccessorRequestDescriptor,
-  serializer: AccessorSenderSerialization
+  serializers: ReadonlyMap<string, AccessorSenderSerializer>
 ) =>
   modestaSerializeFetchBody(
     request.body,
     request.headers['content-type'],
-    serializer
+    serializers
   );
 
 /**
@@ -577,13 +635,15 @@ export const modestaProjectResponse = <TResponse>(
 /**
  * Reads a response body from a fetch-compatible response object.
  * @param response Fetch-compatible response object.
- * @param serializer Serialization hooks.
+ * @param contentType Expected response content type used when the response omits the content-type header.
+ * @param serializers Serialization hooks keyed by media type.
  * @returns Parsed response body value, or undefined for empty responses.
- * @remarks JSON media types are deserialized with `serializer.deserialize()`. Other bodies are read with `response.text()`.
+ * @remarks A body is deserialized when a serializer matches the response content type. Other bodies are read with `response.text()`.
  */
 export const modestaReadFetchResponseBody = (
   response: Response,
-  serializer: AccessorSenderSerialization
+  contentType: string | undefined,
+  serializers: ReadonlyMap<string, AccessorSenderSerializer>
 ) => {
   if (
     response.status === 204 ||
@@ -594,17 +654,18 @@ export const modestaReadFetchResponseBody = (
     return Promise.resolve(undefined);
   }
 
-  const responseContentType = response.headers.get('content-type');
-  if (
-    responseContentType != null &&
-    modestaJsonMediaTypePattern.test(responseContentType)
-  ) {
-    // Short-circuit for default serializer (equality `JSON` object):
+  const responseContentType = response.headers.get('content-type') ?? contentType;
+  const serializer = modestaFindSerializer(serializers, responseContentType);
+  if (serializer != null) {
+    // HACK: Fast path for default JSON serializer:
     if (serializer === modestaDefaultJsonSerializer) {
       return response.json();
-    } else {
-      return response.text().then((data) => serializer.deserialize(data));
     }
+    const payloadData =
+      serializer.payloadType === 'ArrayBuffer'
+        ? response.arrayBuffer()
+        : response.text();
+    return payloadData.then((data) => serializer.deserialize(data));
   }
 
   return response.text();
@@ -628,17 +689,17 @@ export const createFetchSender = (options?: CreateFetchSenderOptions | undefined
     );
   }
 
-  const serializer = options?.serializer ?? modestaDefaultJsonSerializer;
+  const serializers = modestaCreateSerializers(options?.serializers);
 
   return {
-    serializer,
+    serializers,
     send: async (request, accessorOptions) => {
       const preparedRequest = modestaPrepareRequest(
         request,
         accessorOptions,
         options
       );
-      const body = modestaSerializeRequestBody(request, serializer);
+      const body = modestaSerializeRequestBody(request, serializers);
       const requestInit: RequestInit =
         options?.init
           ? {
@@ -678,7 +739,8 @@ export const createFetchSender = (options?: CreateFetchSenderOptions | undefined
 
       const responseBody = await modestaReadFetchResponseBody(
         response,
-        serializer
+        request.responseContentType,
+        serializers
       );
 
       return modestaProjectResponse(request, {

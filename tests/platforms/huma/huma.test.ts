@@ -480,13 +480,12 @@ describe('Huma platform integration', () => {
                 ? 'application/json'
                 : null,
         },
-        json: async () => ({
-          value: 'alpha',
-        }),
         ok: true,
         status: 200,
         statusText: 'OK',
-        text: async () => '',
+        json: async () => ({
+          value: 'alpha',
+        }),
       })),
     });
     const accessor = generatedModule.create_GetDocument_accessor(sender);

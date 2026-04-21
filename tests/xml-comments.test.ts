@@ -267,6 +267,18 @@ describe('xml comments integration', () => {
       generatedSource,
       'CreateFetchSenderOptions'
     );
+    const senderSerializationBlock = getInterfaceBlock(
+      generatedSource,
+      'AccessorSenderSerialization'
+    );
+    const senderInterfaceBlock = getInterfaceBlock(
+      generatedSource,
+      'AccessorSenderInterface'
+    );
+    const senderInterfaceWithContextBlock = getInterfaceBlock(
+      generatedSource,
+      'AccessorSenderInterfaceWithContext'
+    );
     const modestaPrepareRequestOptionsBlock = getInterfaceBlock(
       generatedSource,
       'ModestaPrepareRequestOptions'
@@ -358,28 +370,114 @@ describe('xml comments integration', () => {
       ].join('\n')
     );
 
+    expect(
+      getInterfaceDocumentation(generatedSource, 'AccessorSenderSerialization')
+    ).toBe(
+      [
+        '/**',
+        ' * Serialization hooks used by sender implementations.',
+        ' */',
+      ].join('\n')
+    );
+    expectMemberDocumentation(
+      senderSerializationBlock,
+      'serialize',
+      [
+        '/**',
+        '   * Serializes a request body value into transport data.',
+        '   * @param value Target value',
+        '   * @returns Serialized payload data',
+        '   */',
+      ].join('\n')
+    );
+    expectMemberDocumentation(
+      senderSerializationBlock,
+      'deserialize',
+      [
+        '/**',
+        '   * Deserializes transport data into a response body value.',
+        '   * @param payloadData Serialized payload data',
+        '   * @returns Retrieved value',
+        '   */',
+      ].join('\n')
+    );
+    expect(
+      getConstDocumentation(generatedSource, 'modestaDefaultJsonSerializer')
+    ).toBe(
+      [
+        '/**',
+        ' * Default JSON serializer.',
+        ' * @remarks It is a facade that `JSON` object.',
+        ' */',
+      ].join('\n')
+    );
+    expect(
+      getTypeAliasDocumentation(generatedSource, 'AccessorSenderFunction')
+    ).toBe(
+      [
+        '/**',
+        ' * @deprecated Use `AccessorSenderInterface` instead.',
+        ' */',
+      ].join('\n')
+    );
+    expect(
+      getInterfaceDocumentation(generatedSource, 'AccessorSenderInterface')
+    ).toBe(
+      [
+        '/**',
+        ' * Sender object used by generated accessors that do not require per-call context values.',
+        ' */',
+      ].join('\n')
+    );
+    expectMemberDocumentation(
+      senderInterfaceBlock,
+      'serializer',
+      '/** Serialization hooks used. */'
+    );
     expect(getTypeAliasDocumentation(generatedSource, 'AccessorSender')).toBe(
       [
         '/**',
-        ' * Sender function used by generated accessors that do not require per-call context values.',
-        ' * @typeParam TResponse Response payload type.',
-        ' * @param request Prepared request descriptor.',
-        ' * @param options Additional accessor call options without per-call context.',
-        ' * @returns Promise that resolves to the typed response payload.',
+        ' * Sender implementation used by generated accessors that do not require per-call context values.',
         ' */',
       ].join('\n')
+    );
+    expect(
+      getTypeAliasDocumentation(
+        generatedSource,
+        'AccessorSenderFunctionWithContext'
+      )
+    ).toBe(
+      [
+        '/**',
+        ' * @deprecated Use `AccessorSenderInterfaceWithContext` instead.',
+        ' */',
+      ].join('\n')
+    );
+    expect(
+      getInterfaceDocumentation(
+        generatedSource,
+        'AccessorSenderInterfaceWithContext'
+      )
+    ).toBe(
+      [
+        '/**',
+        ' * Sender object used by generated accessors that require per-call context values.',
+        ' * @typeParam TAccessorContext Per-call context value type passed to the sender.',
+        ' */',
+      ].join('\n')
+    );
+    expectMemberDocumentation(
+      senderInterfaceWithContextBlock,
+      'serializer',
+      '/** Serialization hooks used. */'
     );
     expect(
       getTypeAliasDocumentation(generatedSource, 'AccessorSenderWithContext')
     ).toBe(
       [
         '/**',
-        ' * Sender function used by generated accessors that require per-call context values.',
-        ' * @typeParam TResponse Response payload type.',
+        ' * Sender implementation used by generated accessors that require per-call context values.',
         ' * @typeParam TAccessorContext Per-call context value type passed to the sender.',
-        ' * @param request Prepared request descriptor.',
-        ' * @param options Additional accessor call options with per-call context.',
-        ' * @returns Promise that resolves to the typed response payload.',
         ' */',
       ].join('\n')
     );
@@ -409,6 +507,11 @@ describe('xml comments integration', () => {
       fetchSenderOptionsBlock,
       'init',
       '/** Additional RequestInit values merged into every request. Generated accessors continue to control body, headers, method, and signal. */'
+    );
+    expectMemberDocumentation(
+      fetchSenderOptionsBlock,
+      'serializer',
+      '/** Serialization hooks used for JSON-compatible request and response payloads. Defaults to `modestaDefaultJsonSerializer`. */'
     );
     expect(
       getInterfaceDocumentation(generatedSource, 'ModestaPrepareRequestOptions')
@@ -516,8 +619,9 @@ describe('xml comments integration', () => {
         '/**',
         ' * Serializes a request body using the accessor request content type.',
         ' * @param request Prepared request descriptor emitted by the generated accessor.',
+        ' * @param serializer Serialization hooks used.',
         ' * @returns Serialized body value for fetch-style transports, or undefined when the request has no body.',
-        ' * @remarks JSON media types are stringified. Other body values are returned as-is.',
+        ' * @remarks JSON media types are serialized with `serializer.serialize()`. Other body values are returned as-is.',
         ' */',
       ].join('\n')
     );
@@ -542,8 +646,9 @@ describe('xml comments integration', () => {
         '/**',
         ' * Reads a response body from a fetch-compatible response object.',
         ' * @param response Fetch-compatible response object.',
+        ' * @param serializer Serialization hooks.',
         ' * @returns Parsed response body value, or undefined for empty responses.',
-        ' * @remarks JSON media types are parsed with `response.json()`. Other bodies are read with `response.text()`.',
+        ' * @remarks JSON media types are deserialized with `serializer.deserialize()`. Other bodies are read with `response.text()`.',
         ' */',
       ].join('\n')
     );

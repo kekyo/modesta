@@ -671,19 +671,43 @@ describe('operation definition generation', () => {
     );
   });
 
-  it('emits sender aliases without interface context types', () => {
+  it('emits sender interfaces and deprecated function compatibility aliases', () => {
     expect(generatedSource).toContain(
       [
-        'export type AccessorSender = <TResponse>(',
+        'export interface AccessorSenderSerialization {',
+        '  /**',
+        '   * Serializes a request body value into transport data.',
+        '   * @param value Target value',
+        '   * @returns Serialized payload data',
+        '   */',
+        '  readonly serialize: (value: unknown) => unknown;',
+        '  /**',
+        '   * Deserializes transport data into a response body value.',
+        '   * @param payloadData Serialized payload data',
+        '   * @returns Retrieved value',
+        '   */',
+        '  readonly deserialize: (payloadData: unknown) => unknown;',
+        '}',
+      ].join('\n')
+    );
+    expect(generatedSource).toContain(
+      [
+        '/**',
+        ' * @deprecated Use `AccessorSenderInterface` instead.',
+        ' */',
+        'export type AccessorSenderFunction = <TResponse>(',
         '  request: AccessorRequestDescriptor,',
         '  options: AccessorOptions | undefined) => Promise<TResponse>;',
       ].join('\n')
     );
     expect(generatedSource).toContain(
+      'export type AccessorSender = AccessorSenderFunction | AccessorSenderInterface;'
+    );
+    expect(generatedSource).toContain(
       [
-        'export type AccessorSenderWithContext<TAccessorContext> = <TResponse>(',
-        '  request: AccessorRequestDescriptor,',
-        '  options: AccessorOptionsWithContext<TAccessorContext>) => Promise<TResponse>;',
+        'export type AccessorSenderWithContext<TAccessorContext> =',
+        '  | AccessorSenderFunctionWithContext<TAccessorContext>',
+        '  | AccessorSenderInterfaceWithContext<TAccessorContext>;',
       ].join('\n')
     );
   });
@@ -697,10 +721,13 @@ describe('operation definition generation', () => {
         '  AccessorOptions,',
         '  AccessorRequestDescriptor,',
         '  AccessorSender,',
+        '  AccessorSenderInterface,',
+        '  AccessorSenderInterfaceWithContext,',
         '  AccessorSenderWithContext,',
         '  create_CreateItem_accessor,',
         '  create_DeleteItem_accessor,',
         '  createFetchSender,',
+        '  modestaDefaultJsonSerializer,',
         '  modestaProjectResponse,',
         "} from './generated.ts';",
         '',
@@ -721,6 +748,15 @@ describe('operation definition generation', () => {
         '  });',
         'create_DeleteItem_accessor(senderFromLambda);',
         '',
+        'const senderFromObject: AccessorSenderInterface = {',
+        '  serializer: modestaDefaultJsonSerializer,',
+        '  send: async <TResponse>(',
+        '    _request: AccessorRequestDescriptor,',
+        '    _options: AccessorOptions | undefined',
+        "  ): Promise<TResponse> => 'ok' as unknown as TResponse,",
+        '};',
+        'create_DeleteItem_accessor(senderFromObject);',
+        '',
         'const senderWithContext: AccessorSenderWithContext<{ requestId: string }> = async <TResponse>(',
         '  _request: AccessorRequestDescriptor,',
         '  options: AccessorOptionsWithContext<{ requestId: string }>',
@@ -732,6 +768,18 @@ describe('operation definition generation', () => {
         "createAccessor.post({ name: 'alpha' });",
         '// @ts-expect-error accessor factories no longer accept interface context arguments',
         "create_CreateItem_accessor(senderWithContext, 'trace-42');",
+        '',
+        'const senderWithContextFromObject: AccessorSenderInterfaceWithContext<{ requestId: string }> = {',
+        '  serializer: modestaDefaultJsonSerializer,',
+        '  send: async <TResponse>(',
+        '    _request: AccessorRequestDescriptor,',
+        '    options: AccessorOptionsWithContext<{ requestId: string }>',
+        '  ): Promise<TResponse> => options.context as unknown as TResponse,',
+        '};',
+        'const createAccessorFromObject = create_CreateItem_accessor(senderWithContextFromObject);',
+        "createAccessorFromObject.post({ name: 'alpha' }, { context: { requestId: 'request-99' } });",
+        '// @ts-expect-error per-call context is required for sender objects with context',
+        "createAccessorFromObject.post({ name: 'alpha' });",
         '',
         'const fetchSender = createFetchSender();',
         "const fetchSenderWithOptions = createFetchSender({ baseUrl: 'https://example.com/' });",
@@ -786,9 +834,25 @@ describe('operation definition generation', () => {
       body: requestBody,
       signal,
     });
-    expect(generatedModule.modestaSerializeRequestBody(request)).toBe(
-      JSON.stringify(requestBody)
-    );
+    expect(
+      generatedModule.modestaSerializeRequestBody(
+        request,
+        generatedModule.modestaDefaultJsonSerializer
+      )
+    ).toBe(JSON.stringify(requestBody));
+
+    const customSerializer = {
+      deserialize: vi.fn(),
+      serialize: vi.fn((value: unknown) => ({
+        encoded: value,
+      })),
+    };
+    expect(
+      generatedModule.modestaSerializeRequestBody(request, customSerializer)
+    ).toEqual({
+      encoded: requestBody,
+    });
+    expect(customSerializer.serialize).toHaveBeenCalledWith(requestBody);
     expect(
       generatedModule.modestaPrepareRequest(
         {
@@ -875,28 +939,32 @@ describe('operation definition generation', () => {
   });
 
   it('provides a public fetch response body reader helper', async () => {
-    const json = vi.fn(async () => ({
+    const responseBody = {
       id: '42',
       source: 'helper',
-    }));
-    const text = vi.fn(async () => 'unused');
+    };
+    const responseText = JSON.stringify(responseBody);
+    const serializer = {
+      deserialize: vi.fn((data: unknown) => JSON.parse(String(data))),
+      serialize: vi.fn(),
+    };
+    const text = vi.fn(async () => responseText);
 
     await expect(
-      generatedModule.modestaReadFetchResponseBody({
-        status: 200,
-        headers: {
-          get: (name: string) =>
-            name === 'content-type' ? 'application/json' : null,
+      generatedModule.modestaReadFetchResponseBody(
+        {
+          status: 200,
+          headers: {
+            get: (name: string) =>
+              name === 'content-type' ? 'application/json' : null,
+          },
+          text,
         },
-        json,
-        text,
-      })
-    ).resolves.toEqual({
-      id: '42',
-      source: 'helper',
-    });
-    expect(json).toHaveBeenCalledTimes(1);
-    expect(text).not.toHaveBeenCalled();
+        serializer
+      )
+    ).resolves.toEqual(responseBody);
+    expect(text).toHaveBeenCalledTimes(1);
+    expect(serializer.deserialize).toHaveBeenCalledWith(responseText);
 
     const emptyText = vi.fn(async () => 'ignored');
     await expect(
@@ -979,6 +1047,7 @@ describe('operation definition generation', () => {
       id: '42',
       source: 'route',
     }));
+    const text = vi.fn(async () => JSON.stringify(await json()));
     const fetchImplementation = vi.fn(
       async (input: URL, init?: RequestInit) => {
         expect(String(input)).toBe('https://current.example/route/42');
@@ -998,7 +1067,7 @@ describe('operation definition generation', () => {
               name === 'content-type' ? 'application/json' : null,
           },
           json,
-          text: async () => '',
+          text,
         };
       }
     );
@@ -1023,6 +1092,7 @@ describe('operation definition generation', () => {
 
     expect(fetchImplementation).toHaveBeenCalledTimes(1);
     expect(json).toHaveBeenCalledTimes(1);
+    expect(text).not.toHaveBeenCalled();
   });
 
   it('requires baseUrl when the current origin is unavailable', async () => {

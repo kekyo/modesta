@@ -57,27 +57,86 @@ export interface AccessorOptionsWithContext<TAccessorContext>
 }
 
 /**
- * Sender function used by generated accessors that do not require per-call context values.
- * @typeParam TResponse Response payload type.
- * @param request Prepared request descriptor.
- * @param options Additional accessor call options without per-call context.
- * @returns Promise that resolves to the typed response payload.
+ * Serialization hooks used by sender implementations.
  */
-export type AccessorSender = <TResponse>(
+export interface AccessorSenderSerialization {
+  /**
+   * Serializes a request body value into transport data.
+   * @param value Target value
+   * @returns Serialized payload data
+   */
+  readonly serialize: (value: unknown) => unknown;
+  /**
+   * Deserializes transport data into a response body value.
+   * @param payloadData Serialized payload data
+   * @returns Retrieved value
+   */
+  readonly deserialize: (payloadData: unknown) => unknown;
+}
+
+/**
+ * @deprecated Use `AccessorSenderInterface` instead.
+ */
+export type AccessorSenderFunction = <TResponse>(
   request: AccessorRequestDescriptor,
   options: AccessorOptions | undefined) => Promise<TResponse>;
 
 /**
- * Sender function used by generated accessors that require per-call context values.
- * @typeParam TResponse Response payload type.
- * @typeParam TAccessorContext Per-call context value type passed to the sender.
- * @param request Prepared request descriptor.
- * @param options Additional accessor call options with per-call context.
- * @returns Promise that resolves to the typed response payload.
+ * Sender object used by generated accessors that do not require per-call context values.
  */
-export type AccessorSenderWithContext<TAccessorContext> = <TResponse>(
+export interface AccessorSenderInterface {
+  /** Serialization hooks used. */
+  readonly serializer: AccessorSenderSerialization;
+  /**
+   * Executes a prepared request.
+   * @typeParam TResponse Response payload type.
+   * @param request Prepared request descriptor.
+   * @param options Additional accessor call options without per-call context.
+   * @returns Promise that resolves to the typed response payload.
+   */
+  readonly send: <TResponse>(
+    request: AccessorRequestDescriptor,
+    options: AccessorOptions | undefined) => Promise<TResponse>;
+}
+
+/**
+ * Sender implementation used by generated accessors that do not require per-call context values.
+ */
+export type AccessorSender = AccessorSenderFunction | AccessorSenderInterface;
+
+/**
+ * @deprecated Use `AccessorSenderInterfaceWithContext` instead.
+ */
+export type AccessorSenderFunctionWithContext<TAccessorContext> = <TResponse>(
   request: AccessorRequestDescriptor,
   options: AccessorOptionsWithContext<TAccessorContext>) => Promise<TResponse>;
+
+/**
+ * Sender object used by generated accessors that require per-call context values.
+ * @typeParam TAccessorContext Per-call context value type passed to the sender.
+ */
+export interface AccessorSenderInterfaceWithContext<TAccessorContext> {
+  /** Serialization hooks used. */
+  readonly serializer: AccessorSenderSerialization;
+  /**
+   * Executes a prepared request.
+   * @typeParam TResponse Response payload type.
+   * @param request Prepared request descriptor.
+   * @param options Additional accessor call options with per-call context.
+   * @returns Promise that resolves to the typed response payload.
+   */
+  readonly send: <TResponse>(
+    request: AccessorRequestDescriptor,
+    options: AccessorOptionsWithContext<TAccessorContext>) => Promise<TResponse>;
+}
+
+/**
+ * Sender implementation used by generated accessors that require per-call context values.
+ * @typeParam TAccessorContext Per-call context value type passed to the sender.
+ */
+export type AccessorSenderWithContext<TAccessorContext> =
+  | AccessorSenderFunctionWithContext<TAccessorContext>
+  | AccessorSenderInterfaceWithContext<TAccessorContext>;
 
 /** Options that configure the fetch-based sender. */
 export interface CreateFetchSenderOptions {
@@ -89,6 +148,8 @@ export interface CreateFetchSenderOptions {
   readonly headers?: Record<string, string> | undefined;
   /** Additional RequestInit values merged into every request. Generated accessors continue to control body, headers, method, and signal. */
   readonly init?: Omit<RequestInit, 'body' | 'headers' | 'method' | 'signal'> | undefined;
+  /** Serialization hooks used for JSON-compatible request and response payloads. Defaults to `modestaDefaultJsonSerializer`. */
+  readonly serializer?: AccessorSenderSerialization | undefined;
 }
 
 /**
@@ -198,13 +259,14 @@ const modestaBuildHeaders = (
 
 const modestaSerializeFetchBody = (
   body: any,
-  contentType: string | undefined
+  contentType: string | undefined,
+  serializer: AccessorSenderSerialization
 ) => {
   if (body == null) {
     return undefined;
   }
   return contentType != null && modestaJsonMediaTypePattern.test(contentType)
-    ? JSON.stringify(body)
+    ? serializer.serialize(body)
     : body;
 };
 
@@ -426,7 +488,36 @@ const modestaComposeResponse = (
   );
 };
 
+const modestaSend = <TResponse>(
+  sender: unknown, // AccessorSender | AccessorSenderWithContext<TAccessorContext>
+  request: AccessorRequestDescriptor,
+  options: unknown
+) => {
+  if (typeof sender === 'function') {
+    return (sender as <TResult>(
+      request: AccessorRequestDescriptor,
+      options: unknown
+    ) => Promise<TResult>)<TResponse>(request, options);
+  }
+
+  return (sender as {
+    readonly send: <TResult>(
+      request: AccessorRequestDescriptor,
+      options: unknown
+    ) => Promise<TResult>;
+  }).send<TResponse>(request, options);
+};
+
 /////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Default JSON serializer.
+ * @remarks It is a facade that `JSON` object.
+ */
+export const modestaDefaultJsonSerializer: AccessorSenderSerialization = {
+  serialize: (value: unknown) => JSON.stringify(value),
+  deserialize: (payloadData: unknown) => JSON.parse(String(payloadData)),
+};
 
 /**
  * Prepares transport-neutral request values for a sender implementation.
@@ -451,12 +542,19 @@ export const modestaPrepareRequest = (
 /**
  * Serializes a request body using the accessor request content type.
  * @param request Prepared request descriptor emitted by the generated accessor.
+ * @param serializer Serialization hooks used.
  * @returns Serialized body value for fetch-style transports, or undefined when the request has no body.
- * @remarks JSON media types are stringified. Other body values are returned as-is.
+ * @remarks JSON media types are serialized with `serializer.serialize()`. Other body values are returned as-is.
  */
 export const modestaSerializeRequestBody = (
-  request: AccessorRequestDescriptor
-) => modestaSerializeFetchBody(request.body, request.headers['content-type']);
+  request: AccessorRequestDescriptor,
+  serializer: AccessorSenderSerialization
+) =>
+  modestaSerializeFetchBody(
+    request.body,
+    request.headers['content-type'],
+    serializer
+  );
 
 /**
  * Projects a transport response into the generated accessor response shape.
@@ -479,10 +577,14 @@ export const modestaProjectResponse = <TResponse>(
 /**
  * Reads a response body from a fetch-compatible response object.
  * @param response Fetch-compatible response object.
+ * @param serializer Serialization hooks.
  * @returns Parsed response body value, or undefined for empty responses.
- * @remarks JSON media types are parsed with `response.json()`. Other bodies are read with `response.text()`.
+ * @remarks JSON media types are deserialized with `serializer.deserialize()`. Other bodies are read with `response.text()`.
  */
-export const modestaReadFetchResponseBody = (response: Response) => {
+export const modestaReadFetchResponseBody = (
+  response: Response,
+  serializer: AccessorSenderSerialization
+) => {
   if (
     response.status === 204 ||
     response.status === 205 ||
@@ -497,7 +599,12 @@ export const modestaReadFetchResponseBody = (response: Response) => {
     responseContentType != null &&
     modestaJsonMediaTypePattern.test(responseContentType)
   ) {
-    return response.json();
+    // Short-circuit for default serializer (equality `JSON` object):
+    if (serializer === modestaDefaultJsonSerializer) {
+      return response.json();
+    } else {
+      return response.text().then((data) => serializer.deserialize(data));
+    }
   }
 
   return response.text();
@@ -513,7 +620,7 @@ export const modestaReadFetchResponseBody = (response: Response) => {
  * When `options.baseUrl` is omitted, `globalThis.location.origin` must be available.
  * Per-call context values are not accepted by this sender implementation.
  */
-export const createFetchSender = (options?: CreateFetchSenderOptions | undefined): AccessorSender => {
+export const createFetchSender = (options?: CreateFetchSenderOptions | undefined): AccessorSenderInterface => {
   const fetchImplementation = options?.fetch ?? globalThis.fetch;
   if (typeof fetchImplementation !== 'function') {
     throw new Error(
@@ -521,53 +628,64 @@ export const createFetchSender = (options?: CreateFetchSenderOptions | undefined
     );
   }
 
-  return async (request, accessorOptions) => {
-    const preparedRequest = modestaPrepareRequest(
-      request,
-      accessorOptions,
-      options
-    );
-    const body = modestaSerializeRequestBody(request);
-    const requestInit: RequestInit =
-      options?.init
-        ? {
-            ...options.init,
-            method: preparedRequest.method,
-          }
-        : {
-            method: preparedRequest.method,
-          };
+  const serializer = options?.serializer ?? modestaDefaultJsonSerializer;
 
-    if (preparedRequest.headers) {
-      requestInit.headers = preparedRequest.headers;
-    }
-    if (body !== undefined) {
-      requestInit.body = body as RequestInit['body'];
-    }
-    if (preparedRequest.signal) {
-      requestInit.signal = preparedRequest.signal;
-    }
-
-    const response = await fetchImplementation(preparedRequest.url, requestInit);
-
-    if (response.ok === false) {
-      const responseText = await response.text();
-      const statusText = response.statusText.length > 0
-        ? ` ${response.statusText}`
-        : '';
-      throw new Error(
-        responseText.length > 0
-          ? `Fetch request failed with ${response.status}${statusText}: ${responseText}`
-          : `Fetch request failed with ${response.status}${statusText}.`
+  return {
+    serializer,
+    send: async (request, accessorOptions) => {
+      const preparedRequest = modestaPrepareRequest(
+        request,
+        accessorOptions,
+        options
       );
-    }
+      const body = modestaSerializeRequestBody(request, serializer);
+      const requestInit: RequestInit =
+        options?.init
+          ? {
+              ...options.init,
+              method: preparedRequest.method,
+            }
+          : {
+              method: preparedRequest.method,
+            };
 
-    const responseBody = await modestaReadFetchResponseBody(response);
+      if (preparedRequest.headers) {
+        requestInit.headers = preparedRequest.headers;
+      }
+      if (body !== undefined) {
+        requestInit.body = body as RequestInit['body'];
+      }
+      if (preparedRequest.signal) {
+        requestInit.signal = preparedRequest.signal;
+      }
 
-    return modestaProjectResponse(request, {
-      body: responseBody,
-      getHeader: (name) => response.headers.get(name),
-    });
+      const response = await fetchImplementation(
+        preparedRequest.url,
+        requestInit
+      );
+
+      if (response.ok === false) {
+        const responseText = await response.text();
+        const statusText = response.statusText.length > 0
+          ? ` ${response.statusText}`
+          : '';
+        throw new Error(
+          responseText.length > 0
+            ? `Fetch request failed with ${response.status}${statusText}: ${responseText}`
+            : `Fetch request failed with ${response.status}${statusText}.`
+        );
+      }
+
+      const responseBody = await modestaReadFetchResponseBody(
+        response,
+        serializer
+      );
+
+      return modestaProjectResponse(request, {
+        body: responseBody,
+        getHeader: (name) => response.headers.get(name),
+      });
+    },
   };
 };
 

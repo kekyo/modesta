@@ -54,7 +54,7 @@ const findInterfaceDeclaration = (source: string, interfaceName: string) => {
 
 const findTypeAliasDeclaration = (source: string, typeName: string) => {
   const pattern = new RegExp(
-    `export type ${escapeRegExp(typeName)}(?:<[^\\n]+?>)? = `,
+    `export type ${escapeRegExp(typeName)}(?:<[^\\n]+?>)? =\\s*`,
     'u'
   );
   const match = pattern.exec(source);
@@ -185,15 +185,18 @@ export const getTypeAliasDocumentation = (source: string, typeName: string) => {
 };
 
 export const getConstDocumentation = (source: string, constName: string) => {
-  const marker = `export const ${constName} = `;
-  const constIndex = source.indexOf(marker);
-  if (constIndex < 0) {
+  const pattern = new RegExp(
+    `export const ${escapeRegExp(constName)}(?:\\s*:[^=]+)?\\s*=`,
+    'u'
+  );
+  const match = pattern.exec(source);
+  if (match == null || match.index == null) {
     throw new Error(`Could not find const '${constName}'.`);
   }
 
   return findDocumentationBeforeIndex(
     source,
-    constIndex,
+    match.index,
     `const '${constName}'`
   );
 };

@@ -691,15 +691,17 @@ describe('operation definition generation', () => {
         '  /**',
         '   * Serializes a request body value into transport data.',
         '   * @param value Target value',
+        '   * @param metadata Schema metadata for the target value',
         '   * @returns Serialized payload data',
         '   */',
-        '  readonly serialize: (value: unknown) => unknown;',
+        '  readonly serialize: (value: unknown, metadata?: AccessorSchemaMetadata | undefined) => unknown;',
         '  /**',
         '   * Deserializes transport data into a response body value.',
         '   * @param payloadData Serialized payload data',
+        '   * @param metadata Schema metadata for the target value',
         '   * @returns Retrieved value',
         '   */',
-        '  readonly deserialize: (payloadData: unknown) => unknown;',
+        '  readonly deserialize: (payloadData: unknown, metadata?: AccessorSchemaMetadata | undefined) => unknown;',
         '}',
       ].join('\n')
     );
@@ -725,6 +727,12 @@ describe('operation definition generation', () => {
     );
   });
 
+  it('omits schema metadata when operation bodies do not contain formatted fields', () => {
+    expect(generatedSource).not.toContain('const modestaSchemaMetadata_');
+    expect(generatedSource).not.toContain('requestBodyMetadata:');
+    expect(generatedSource).not.toContain('responseBodyMetadata:');
+  });
+
   it('type-checks sender and per-call context requirements for generated accessors', async () => {
     const diagnostics = await getTypeScriptDiagnostics({
       'generated.ts': generatedSource,
@@ -733,10 +741,12 @@ describe('operation definition generation', () => {
         '  AccessorOptionsWithContext,',
         '  AccessorOptions,',
         '  AccessorRequestDescriptor,',
+        '  AccessorSchemaMetadata,',
         '  AccessorSender,',
         '  AccessorSenderInterface,',
         '  AccessorSenderInterfaceWithContext,',
         '  AccessorSenderWithContext,',
+        '  CustomJsonSerializerContext,',
         '  CustomJsonSerializerOptions,',
         '  CustomJsonSerializerResult,',
         '  create_CreateItem_accessor,',
@@ -805,18 +815,30 @@ describe('operation definition generation', () => {
         "create_DeleteItem_accessor(fetchSender, 'trace-42');",
         '',
         'const customJsonResult: CustomJsonSerializerResult = { result: undefined };',
+        'const customJsonContext: CustomJsonSerializerContext = {',
+        "  format: 'date-time',",
+        "  metadata: { format: 'date-time' },",
+        '};',
         'const customJsonOptions: CustomJsonSerializerOptions = {',
-        '  trySerialize: (value, ref) => {',
+        '  trySerialize: (value, context, ref) => {',
+        '    context.format;',
         '    ref.result = value;',
         '    return false;',
         '  },',
-        '  tryDeserialize: (value, ref) => {',
+        '  tryDeserialize: (value, context, ref) => {',
+        '    context.metadata;',
         '    ref.result = value;',
         '    return false;',
         '  },',
         '};',
-        'customJsonOptions.trySerialize(undefined, customJsonResult);',
+        'customJsonOptions.trySerialize(undefined, customJsonContext, customJsonResult);',
         'const customJsonSerializer = createCustomJsonSerializer(customJsonOptions);',
+        'const customJsonMetadata: AccessorSchemaMetadata = {',
+        '  properties: {',
+        "    value: { format: 'date-time' },",
+        '  },',
+        '};',
+        'customJsonSerializer.serialize({ value: undefined }, customJsonMetadata);',
         'const customSerializerSender: AccessorSenderInterface = {',
         "  serializers: new Map([['application/json', customJsonSerializer]]),",
         '  send: async <TResponse>(',
@@ -1058,55 +1080,76 @@ describe('operation definition generation', () => {
 
   it('provides a custom JSON serializer hook helper', () => {
     const date = new Date('2024-01-02T03:04:05.000Z');
-    const trySerialize = vi.fn((value: unknown, ref: { result: unknown }) => {
-      if (value instanceof Date) {
-        ref.result = {
-          type: 'date-time',
-          value: value.toISOString(),
-        };
-        return true;
+    const metadata = {
+      properties: {
+        nested: {
+          properties: {
+            recordedAt: {
+              format: 'date-time',
+            },
+          },
+        },
+      },
+    };
+    const trySerialize = vi.fn(
+      (
+        value: unknown,
+        context: { format: string | undefined },
+        ref: { result: unknown }
+      ) => {
+        if (context.format === 'date-time' && value instanceof Date) {
+          ref.result = value.toISOString();
+          return true;
+        }
+        return false;
       }
-      return false;
-    });
-    const tryDeserialize = vi.fn((value: unknown, ref: { result: unknown }) => {
-      if (
-        typeof value === 'object' &&
-        value != null &&
-        (value as Record<string, unknown>).type === 'date-time' &&
-        typeof (value as Record<string, unknown>).value === 'string'
-      ) {
-        ref.result = new Date((value as Record<string, string>).value);
-        return true;
+    );
+    const tryDeserialize = vi.fn(
+      (
+        value: unknown,
+        context: { format: string | undefined },
+        ref: { result: unknown }
+      ) => {
+        if (context.format === 'date-time' && typeof value === 'string') {
+          ref.result = new Date(value);
+          return true;
+        }
+        return false;
       }
-      return false;
-    });
+    );
     const serializer = generatedModule.createCustomJsonSerializer({
       tryDeserialize,
       trySerialize,
     });
 
-    const serialized = serializer.serialize({
-      nested: {
-        recordedAt: date,
+    const serialized = serializer.serialize(
+      {
+        nested: {
+          recordedAt: date,
+        },
+        value: 'alpha',
       },
-      value: 'alpha',
-    });
+      metadata
+    );
 
     expect(serializer.payloadType).toBe('string');
     expect(serialized).toBe(
       JSON.stringify({
         nested: {
-          recordedAt: {
-            type: 'date-time',
-            value: '2024-01-02T03:04:05.000Z',
-          },
+          recordedAt: '2024-01-02T03:04:05.000Z',
         },
         value: 'alpha',
       })
     );
-    expect(trySerialize).toHaveBeenCalledWith(date, expect.any(Object));
+    expect(trySerialize).toHaveBeenCalledWith(
+      date,
+      expect.objectContaining({
+        format: 'date-time',
+      }),
+      expect.any(Object)
+    );
 
-    const deserialized = serializer.deserialize(serialized) as {
+    const deserialized = serializer.deserialize(serialized, metadata) as {
       nested: {
         recordedAt: Date;
       };
@@ -1119,10 +1162,10 @@ describe('operation definition generation', () => {
       '2024-01-02T03:04:05.000Z'
     );
     expect(tryDeserialize).toHaveBeenCalledWith(
-      {
-        type: 'date-time',
-        value: '2024-01-02T03:04:05.000Z',
-      },
+      '2024-01-02T03:04:05.000Z',
+      expect.objectContaining({
+        format: 'date-time',
+      }),
       expect.any(Object)
     );
   });
@@ -1753,6 +1796,12 @@ describe('operation definition generation', () => {
           'content-type': 'application/json',
         },
         body: [1, 2, 3],
+        requestBodyMetadata: {
+          items: {
+            format: 'int32',
+          },
+        },
+        responseContentType: undefined,
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -1791,6 +1840,12 @@ describe('operation definition generation', () => {
           'content-type': 'application/json',
         },
         body: [1, 2, 3],
+        requestBodyMetadata: {
+          items: {
+            format: 'int32',
+          },
+        },
+        responseContentType: undefined,
         responseHeaders: [],
         wrapResponseBody: false,
       },

@@ -271,9 +271,17 @@ describe('xml comments integration', () => {
       generatedSource,
       'AccessorSenderSerializer'
     );
+    const accessorSchemaMetadataBlock = getInterfaceBlock(
+      generatedSource,
+      'AccessorSchemaMetadata'
+    );
     const customJsonSerializerResultBlock = getInterfaceBlock(
       generatedSource,
       'CustomJsonSerializerResult'
+    );
+    const customJsonSerializerContextBlock = getInterfaceBlock(
+      generatedSource,
+      'CustomJsonSerializerContext'
     );
     const customJsonSerializerOptionsBlock = getInterfaceBlock(
       generatedSource,
@@ -343,8 +351,18 @@ describe('xml comments integration', () => {
     );
     expectMemberDocumentation(
       requestDescriptorBlock,
+      'requestBodyMetadata',
+      '/** Schema metadata for the request body payload. */'
+    );
+    expectMemberDocumentation(
+      requestDescriptorBlock,
       'responseContentType',
       '/** Expected response content type selected from the OpenAPI response definition. */'
+    );
+    expectMemberDocumentation(
+      requestDescriptorBlock,
+      'responseBodyMetadata',
+      '/** Schema metadata for the response body payload. */'
     );
     expectMemberDocumentation(
       requestDescriptorBlock,
@@ -399,6 +417,31 @@ describe('xml comments integration', () => {
         ' */',
       ].join('\n')
     );
+    expect(
+      getInterfaceDocumentation(generatedSource, 'AccessorSchemaMetadata')
+    ).toBe(
+      ['/**', ' * Schema metadata passed to serializers.', ' */'].join('\n')
+    );
+    expectMemberDocumentation(
+      accessorSchemaMetadataBlock,
+      'format',
+      '/** OpenAPI schema format for the current value. */'
+    );
+    expectMemberDocumentation(
+      accessorSchemaMetadataBlock,
+      'properties',
+      '/** Object property metadata keyed by JSON property name. */'
+    );
+    expectMemberDocumentation(
+      accessorSchemaMetadataBlock,
+      'items',
+      '/** Array item metadata. */'
+    );
+    expectMemberDocumentation(
+      accessorSchemaMetadataBlock,
+      'additionalProperties',
+      '/** Dictionary value metadata for additional object properties. */'
+    );
     expectMemberDocumentation(
       senderSerializationBlock,
       'payloadType',
@@ -411,6 +454,7 @@ describe('xml comments integration', () => {
         '/**',
         '   * Serializes a request body value into transport data.',
         '   * @param value Target value',
+        '   * @param metadata Schema metadata for the target value',
         '   * @returns Serialized payload data',
         '   */',
       ].join('\n')
@@ -422,6 +466,7 @@ describe('xml comments integration', () => {
         '/**',
         '   * Deserializes transport data into a response body value.',
         '   * @param payloadData Serialized payload data',
+        '   * @param metadata Schema metadata for the target value',
         '   * @returns Retrieved value',
         '   */',
       ].join('\n')
@@ -454,6 +499,25 @@ describe('xml comments integration', () => {
       '/** Converted value returned from a hook when the hook reports that it handled the input. */'
     );
     expect(
+      getInterfaceDocumentation(generatedSource, 'CustomJsonSerializerContext')
+    ).toBe(
+      [
+        '/**',
+        ' * Current schema context passed to custom JSON conversion hooks.',
+        ' */',
+      ].join('\n')
+    );
+    expectMemberDocumentation(
+      customJsonSerializerContextBlock,
+      'format',
+      '/** OpenAPI schema format for the current value. */'
+    );
+    expectMemberDocumentation(
+      customJsonSerializerContextBlock,
+      'metadata',
+      '/** Schema metadata for the current value. */'
+    );
+    expect(
       getInterfaceDocumentation(generatedSource, 'CustomJsonSerializerOptions')
     ).toBe(
       [
@@ -469,6 +533,7 @@ describe('xml comments integration', () => {
         '/**',
         '   * Tries to convert a body value before JSON serialization.',
         '   * @param value Candidate value.',
+        '   * @param context Current schema context for the candidate value.',
         '   * @param ref Result holder that receives the converted value.',
         '   * @returns true when the hook handled the value; otherwise false.',
         '   */',
@@ -481,6 +546,7 @@ describe('xml comments integration', () => {
         '/**',
         '   * Tries to convert a parsed JSON value after JSON deserialization.',
         '   * @param value Candidate parsed JSON value.',
+        '   * @param context Current schema context for the candidate value.',
         '   * @param ref Result holder that receives the converted value.',
         '   * @returns true when the hook handled the value; otherwise false.',
         '   */',
@@ -735,6 +801,7 @@ describe('xml comments integration', () => {
         ' * @param response Fetch-compatible response object.',
         ' * @param contentType Expected response content type used when the response omits the content-type header.',
         ' * @param serializers Serialization hooks keyed by media type.',
+        ' * @param metadata Schema metadata for the response body payload.',
         ' * @returns Parsed response body value, or undefined for empty responses.',
         ' * @remarks A body is deserialized when a serializer matches the response content type. Other bodies are read with `response.text()`.',
         ' */',

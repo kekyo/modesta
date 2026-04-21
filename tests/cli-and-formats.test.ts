@@ -8,7 +8,8 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { basename, join, resolve } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { beforeAll, describe, expect, it } from 'vitest';
+import dayjs from 'dayjs';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import YAML from 'yaml';
 import type { IncomingMessage, ServerResponse } from 'http';
 import {
@@ -23,6 +24,7 @@ import {
   runModestaCli,
   saveArtifactText,
   SwaggerFixtureProject,
+  transpileGeneratedSource,
 } from './support/harness';
 import { createSelfSignedHttpsServer } from './support/https-fixture';
 
@@ -62,7 +64,7 @@ const formatProject: SwaggerFixtureProject = {
       '',
       'app.Run();',
       '',
-      'public sealed record LookupRequest(string[] Ids);',
+      'public sealed record LookupRequest(string[] Ids, DateTimeOffset RequestedAt, SummaryItem Anchor, DateTimeOffset[] Milestones, Dictionary<string, DateTimeOffset> Windows);',
       'public sealed record SummaryEnvelope(string Region, SummaryItem[] Items);',
       'public sealed record SummaryItem(string Id, DateTimeOffset RecordedAt, string? Note);',
       '',
@@ -72,12 +74,19 @@ const formatProject: SwaggerFixtureProject = {
 
 describe('CLI and format support', () => {
   let swaggerJson = '';
+  let generatedSource = '';
+  let generatedModule: Record<string, any>;
 
   beforeAll(async () => {
     swaggerJson = await fetchSwaggerJsonFromProject(
       formatProject,
       'cli-and-formats'
     );
+    generatedSource = generateAccessorSource({
+      document: swaggerJson,
+      source: 'swagger.json',
+    });
+    generatedModule = await transpileGeneratedSource(generatedSource);
   });
 
   const listenServer = async (
@@ -117,6 +126,231 @@ describe('CLI and format support', () => {
       return basename(source);
     }
   };
+
+  const getConstBlock = (source: string, constName: string) => {
+    const start = source.indexOf(`const ${constName}:`);
+    expect(start).toBeGreaterThanOrEqual(0);
+    const end = source.indexOf('\n\n', start);
+    return source.slice(start, end >= 0 ? end : undefined);
+  };
+
+  it('emits reusable schema metadata only for formatted branches', () => {
+    expect(generatedSource).toContain(
+      [
+        'const modestaSchemaMetadata_format_date_time: AccessorSchemaMetadata = {',
+        "  format: 'date-time',",
+        '};',
+      ].join('\n')
+    );
+
+    const summaryItemMetadata = getConstBlock(
+      generatedSource,
+      'modestaSchemaMetadata_SummaryItem'
+    );
+    expect(summaryItemMetadata).toContain(
+      'recordedAt: modestaSchemaMetadata_format_date_time'
+    );
+    expect(summaryItemMetadata).not.toContain('id:');
+    expect(summaryItemMetadata).not.toContain('note:');
+
+    const summaryEnvelopeMetadata = getConstBlock(
+      generatedSource,
+      'modestaSchemaMetadata_SummaryEnvelope'
+    );
+    expect(summaryEnvelopeMetadata).toContain(
+      'items: modestaSchemaMetadata_SummaryEnvelope_items'
+    );
+    expect(summaryEnvelopeMetadata).not.toContain('region:');
+    expect(
+      getConstBlock(
+        generatedSource,
+        'modestaSchemaMetadata_SummaryEnvelope_items'
+      )
+    ).toContain('items: modestaSchemaMetadata_SummaryItem');
+
+    const lookupRequestMetadata = getConstBlock(
+      generatedSource,
+      'modestaSchemaMetadata_LookupRequest'
+    );
+    expect(lookupRequestMetadata).toContain(
+      'requestedAt: modestaSchemaMetadata_format_date_time'
+    );
+    expect(lookupRequestMetadata).toContain(
+      'anchor: modestaSchemaMetadata_SummaryItem'
+    );
+    expect(lookupRequestMetadata).not.toContain('ids:');
+  });
+
+  it('passes format metadata to user-land Date and Dayjs serializers', async () => {
+    const serializers = new Map<string, any>();
+    const trySerialize = vi.fn(
+      (
+        value: unknown,
+        context: { format: string | undefined },
+        ref: { result: unknown }
+      ) => {
+        if (context.format !== 'date-time') {
+          return false;
+        }
+        if (value instanceof Date) {
+          ref.result = value.toISOString();
+          return true;
+        }
+        if (dayjs.isDayjs(value)) {
+          ref.result = value.toISOString();
+          return true;
+        }
+        return false;
+      }
+    );
+    const tryDeserialize = vi.fn(
+      (
+        value: unknown,
+        context: { format: string | undefined },
+        ref: { result: unknown }
+      ) => {
+        if (context.format === 'date-time' && typeof value === 'string') {
+          ref.result = dayjs(value);
+          return true;
+        }
+        return false;
+      }
+    );
+    const serializer = generatedModule.createCustomJsonSerializer({
+      tryDeserialize,
+      trySerialize,
+    });
+    serializers.set('application/json', serializer);
+
+    let serializedLookupBody: unknown;
+    const sender = {
+      serializers,
+      send: async (request: any) => {
+        if (request.operationName === 'LookupSummaries.post') {
+          serializedLookupBody = JSON.parse(
+            generatedModule.modestaSerializeRequestBody(request, serializers)
+          );
+          const lookupResponseBody =
+            await generatedModule.modestaReadFetchResponseBody(
+              {
+                status: 200,
+                headers: {
+                  get: (name: string) =>
+                    name === 'content-type' ? 'application/json' : null,
+                },
+                text: async () =>
+                  JSON.stringify({
+                    alpha: {
+                      id: 'alpha',
+                      note: null,
+                      recordedAt: '2024-02-02T03:04:05.000Z',
+                    },
+                  }),
+              },
+              request.responseContentType,
+              serializers,
+              request.responseBodyMetadata
+            );
+          return generatedModule.modestaProjectResponse(request, {
+            body: lookupResponseBody,
+            getHeader: () => null,
+          });
+        }
+
+        const listResponseBody =
+          await generatedModule.modestaReadFetchResponseBody(
+            {
+              status: 200,
+              headers: {
+                get: (name: string) =>
+                  name === 'content-type' ? 'application/json' : null,
+              },
+              text: async () =>
+                JSON.stringify({
+                  items: [
+                    {
+                      id: 'bravo',
+                      note: 'ok',
+                      recordedAt: '2024-03-03T04:05:06.000Z',
+                    },
+                  ],
+                  region: 'apac',
+                }),
+            },
+            request.responseContentType,
+            serializers,
+            request.responseBodyMetadata
+          );
+        return generatedModule.modestaProjectResponse(request, {
+          body: listResponseBody,
+          getHeader: () => null,
+        });
+      },
+    };
+
+    const lookupAccessor =
+      generatedModule.create_LookupSummaries_accessor(sender);
+    const lookupResult = await lookupAccessor.post({
+      anchor: {
+        id: {
+          untouched: true,
+        },
+        note: 'anchor',
+        recordedAt: new Date('2024-01-02T03:04:05.000Z'),
+      },
+      ids: ['alpha'],
+      milestones: [dayjs('2024-05-06T07:08:09.000Z')],
+      requestedAt: dayjs('2024-04-05T06:07:08.000Z'),
+      windows: {
+        start: new Date('2024-06-07T08:09:10.000Z'),
+      },
+    });
+
+    expect(serializedLookupBody).toEqual({
+      anchor: {
+        id: {
+          untouched: true,
+        },
+        note: 'anchor',
+        recordedAt: '2024-01-02T03:04:05.000Z',
+      },
+      ids: ['alpha'],
+      milestones: ['2024-05-06T07:08:09.000Z'],
+      requestedAt: '2024-04-05T06:07:08.000Z',
+      windows: {
+        start: '2024-06-07T08:09:10.000Z',
+      },
+    });
+    expect(dayjs.isDayjs(lookupResult.alpha.recordedAt)).toBe(true);
+    expect(lookupResult.alpha.recordedAt.toISOString()).toBe(
+      '2024-02-02T03:04:05.000Z'
+    );
+
+    const listAccessor = generatedModule.create_ListSummaries_accessor(sender);
+    const listResult = await listAccessor.get({
+      limit: 1,
+      region: 'apac',
+      xApiKey: 'key',
+    });
+    expect(dayjs.isDayjs(listResult.items[0].recordedAt)).toBe(true);
+    expect(listResult.items[0].recordedAt.toISOString()).toBe(
+      '2024-03-03T04:05:06.000Z'
+    );
+    expect(trySerialize).toHaveBeenCalledWith(
+      expect.any(Date),
+      expect.objectContaining({
+        format: 'date-time',
+      }),
+      expect.any(Object)
+    );
+    expect(tryDeserialize).toHaveBeenCalledWith(
+      '2024-03-03T04:05:06.000Z',
+      expect.objectContaining({
+        format: 'date-time',
+      }),
+      expect.any(Object)
+    );
+  });
 
   it('writes generated source through the CLI', async () => {
     const generatedSource = await runModestaCli(

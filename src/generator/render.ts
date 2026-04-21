@@ -512,12 +512,6 @@ const renderAccessorFactory = (
   push(
     `): ${accessorGroup.interfaceName} | ${accessorWithContextInterfaceName}<TAccessorContext> {`
   );
-  push('  const modestaSender = sender as <TResponse>(');
-  push('    request: AccessorRequestDescriptor,');
-  push(
-    '    options: AccessorOptions | AccessorOptionsWithContext<TAccessorContext> | undefined'
-  );
-  push('  ) => Promise<TResponse>;');
   push('  return {');
 
   for (const operation of accessorGroup.operations) {
@@ -533,7 +527,7 @@ const renderAccessorFactory = (
       operation.response
     );
     push(
-      `    ${renderPropertyName(operation.memberName)}: async (${argumentToken}) => modestaSender<${responseTypeExpression}>({`
+      `    ${renderPropertyName(operation.memberName)}: async (${argumentToken}) => modestaSend<${responseTypeExpression}>(sender, {`
     );
     push(
       `      operationName: ${renderLiteral(operation.descriptorOperationName)},`
@@ -565,6 +559,9 @@ const renderAccessorFactory = (
         accessorGroup,
         argumentMode === 'optional'
       )},`
+    );
+    push(
+      `      responseContentType: ${operation.response.accept != null ? renderLiteral(operation.response.accept) : 'undefined'},`
     );
     push(
       `      responseHeaders: ${renderOperationResponseHeadersExpression(

@@ -96,7 +96,7 @@ export type AccessorSender =  /* ... */;
 export interface CreateFetchSenderOptions { /* ... */ }
 
 export const createFetchSender = (
-  options: CreateFetchSenderOptions
+  options?: CreateFetchSenderOptions | undefined
 ): AccessorSender => {
   /* ... (helper implementation is generated here) */
 };
@@ -125,6 +125,7 @@ export function create_GetUser_accessor(
 
 As you can see, the generated proxy file remains self-contained and adds no external runtime dependency.
 Using it, you can easily write API calling code like this:
+In browsers, `baseUrl` can be omitted to use the current `globalThis.location.origin`.
 
 ```typescript
 import {

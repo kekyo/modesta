@@ -255,6 +255,23 @@ describe('operation definition generation', () => {
     edgeCaseWarnings.filter((message) =>
       message.includes(`accessor '${accessorName}'`)
     );
+  const replaceGlobalProperty = (name: string, value: unknown) => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
+    Object.defineProperty(globalThis, name, {
+      configurable: true,
+      value,
+      writable: true,
+    });
+
+    return () => {
+      if (descriptor == null) {
+        delete (globalThis as Record<string, unknown>)[name];
+        return;
+      }
+
+      Object.defineProperty(globalThis, name, descriptor);
+    };
+  };
 
   beforeAll(async () => {
     generatedSource = await generateAccessorSourceFromProject({
@@ -420,6 +437,7 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -444,6 +462,7 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -470,6 +489,7 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -495,6 +515,7 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -522,6 +543,7 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -549,6 +571,7 @@ describe('operation definition generation', () => {
         body: {
           name: 'alpha',
         },
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -587,6 +610,7 @@ describe('operation definition generation', () => {
         body: {
           name: 'alpha',
         },
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -623,6 +647,7 @@ describe('operation definition generation', () => {
         body: {
           name: 'alpha',
         },
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -654,19 +679,48 @@ describe('operation definition generation', () => {
     );
   });
 
-  it('emits sender aliases without interface context types', () => {
+  it('emits sender interfaces and deprecated function compatibility aliases', () => {
+    expect(generatedSource).toContain(
+      "export type PayloadType = 'string' | 'ArrayBuffer';"
+    );
     expect(generatedSource).toContain(
       [
-        'export type AccessorSender = <TResponse>(',
+        'export interface AccessorSenderSerializer {',
+        '  /** Serialized payload data shape used by this serializer. */',
+        '  readonly payloadType: PayloadType;',
+        '  /**',
+        '   * Serializes a request body value into transport data.',
+        '   * @param value Target value',
+        '   * @returns Serialized payload data',
+        '   */',
+        '  readonly serialize: (value: unknown) => unknown;',
+        '  /**',
+        '   * Deserializes transport data into a response body value.',
+        '   * @param payloadData Serialized payload data',
+        '   * @returns Retrieved value',
+        '   */',
+        '  readonly deserialize: (payloadData: unknown) => unknown;',
+        '}',
+      ].join('\n')
+    );
+    expect(generatedSource).toContain(
+      [
+        '/**',
+        ' * @deprecated Use `AccessorSenderInterface` instead.',
+        ' */',
+        'export type AccessorSenderFunction = <TResponse>(',
         '  request: AccessorRequestDescriptor,',
         '  options: AccessorOptions | undefined) => Promise<TResponse>;',
       ].join('\n')
     );
     expect(generatedSource).toContain(
+      'export type AccessorSender = AccessorSenderFunction | AccessorSenderInterface;'
+    );
+    expect(generatedSource).toContain(
       [
-        'export type AccessorSenderWithContext<TAccessorContext> = <TResponse>(',
-        '  request: AccessorRequestDescriptor,',
-        '  options: AccessorOptionsWithContext<TAccessorContext>) => Promise<TResponse>;',
+        'export type AccessorSenderWithContext<TAccessorContext> =',
+        '  | AccessorSenderFunctionWithContext<TAccessorContext>',
+        '  | AccessorSenderInterfaceWithContext<TAccessorContext>;',
       ].join('\n')
     );
   });
@@ -680,10 +734,13 @@ describe('operation definition generation', () => {
         '  AccessorOptions,',
         '  AccessorRequestDescriptor,',
         '  AccessorSender,',
+        '  AccessorSenderInterface,',
+        '  AccessorSenderInterfaceWithContext,',
         '  AccessorSenderWithContext,',
         '  create_CreateItem_accessor,',
         '  create_DeleteItem_accessor,',
         '  createFetchSender,',
+        '  modestaDefaultSerializers,',
         '  modestaProjectResponse,',
         "} from './generated.ts';",
         '',
@@ -704,6 +761,15 @@ describe('operation definition generation', () => {
         '  });',
         'create_DeleteItem_accessor(senderFromLambda);',
         '',
+        'const senderFromObject: AccessorSenderInterface = {',
+        '  serializers: modestaDefaultSerializers,',
+        '  send: async <TResponse>(',
+        '    _request: AccessorRequestDescriptor,',
+        '    _options: AccessorOptions | undefined',
+        "  ): Promise<TResponse> => 'ok' as unknown as TResponse,",
+        '};',
+        'create_DeleteItem_accessor(senderFromObject);',
+        '',
         'const senderWithContext: AccessorSenderWithContext<{ requestId: string }> = async <TResponse>(',
         '  _request: AccessorRequestDescriptor,',
         '  options: AccessorOptionsWithContext<{ requestId: string }>',
@@ -716,8 +782,22 @@ describe('operation definition generation', () => {
         '// @ts-expect-error accessor factories no longer accept interface context arguments',
         "create_CreateItem_accessor(senderWithContext, 'trace-42');",
         '',
-        "const fetchSender = createFetchSender({ baseUrl: 'https://example.com/' });",
+        'const senderWithContextFromObject: AccessorSenderInterfaceWithContext<{ requestId: string }> = {',
+        '  serializers: modestaDefaultSerializers,',
+        '  send: async <TResponse>(',
+        '    _request: AccessorRequestDescriptor,',
+        '    options: AccessorOptionsWithContext<{ requestId: string }>',
+        '  ): Promise<TResponse> => options.context as unknown as TResponse,',
+        '};',
+        'const createAccessorFromObject = create_CreateItem_accessor(senderWithContextFromObject);',
+        "createAccessorFromObject.post({ name: 'alpha' }, { context: { requestId: 'request-99' } });",
+        '// @ts-expect-error per-call context is required for sender objects with context',
+        "createAccessorFromObject.post({ name: 'alpha' });",
+        '',
+        'const fetchSender = createFetchSender();',
+        "const fetchSenderWithOptions = createFetchSender({ baseUrl: 'https://example.com/' });",
         'create_DeleteItem_accessor(fetchSender);',
+        'create_DeleteItem_accessor(fetchSenderWithOptions);',
         '// @ts-expect-error accessor factories no longer accept interface context arguments',
         "create_DeleteItem_accessor(fetchSender, 'trace-42');",
         '',
@@ -767,9 +847,29 @@ describe('operation definition generation', () => {
       body: requestBody,
       signal,
     });
-    expect(generatedModule.modestaSerializeRequestBody(request)).toBe(
-      JSON.stringify(requestBody)
-    );
+    expect(
+      generatedModule.modestaSerializeRequestBody(
+        request,
+        generatedModule.modestaDefaultSerializers
+      )
+    ).toBe(JSON.stringify(requestBody));
+
+    const customSerializer = {
+      deserialize: vi.fn(),
+      payloadType: 'string',
+      serialize: vi.fn((value: unknown) => ({
+        encoded: value,
+      })),
+    };
+    expect(
+      generatedModule.modestaSerializeRequestBody(
+        request,
+        new Map([['application/json', customSerializer]])
+      )
+    ).toEqual({
+      encoded: requestBody,
+    });
+    expect(customSerializer.serialize).toHaveBeenCalledWith(requestBody);
     expect(
       generatedModule.modestaPrepareRequest(
         {
@@ -856,38 +956,77 @@ describe('operation definition generation', () => {
   });
 
   it('provides a public fetch response body reader helper', async () => {
-    const json = vi.fn(async () => ({
+    const responseBody = {
       id: '42',
       source: 'helper',
-    }));
-    const text = vi.fn(async () => 'unused');
+    };
+    const responseText = JSON.stringify(responseBody);
+    const serializer = {
+      deserialize: vi.fn((data: unknown) => JSON.parse(String(data))),
+      payloadType: 'string',
+      serialize: vi.fn(),
+    };
+    const text = vi.fn(async () => responseText);
 
     await expect(
-      generatedModule.modestaReadFetchResponseBody({
-        status: 200,
-        headers: {
-          get: (name: string) =>
-            name === 'content-type' ? 'application/json' : null,
+      generatedModule.modestaReadFetchResponseBody(
+        {
+          status: 200,
+          headers: {
+            get: (name: string) =>
+              name === 'content-type' ? 'application/json' : null,
+          },
+          text,
         },
-        json,
-        text,
-      })
-    ).resolves.toEqual({
-      id: '42',
-      source: 'helper',
-    });
-    expect(json).toHaveBeenCalledTimes(1);
-    expect(text).not.toHaveBeenCalled();
+        'application/json',
+        new Map([['application/json', serializer]])
+      )
+    ).resolves.toEqual(responseBody);
+    expect(text).toHaveBeenCalledTimes(1);
+    expect(serializer.deserialize).toHaveBeenCalledWith(responseText);
+
+    const responsePayload = new ArrayBuffer(4);
+    const arrayBufferSerializer = {
+      deserialize: vi.fn((data: unknown) => data),
+      payloadType: 'ArrayBuffer',
+      serialize: vi.fn(),
+    };
+    const arrayBuffer = vi.fn(async () => responsePayload);
+    const unusedText = vi.fn(async () => 'ignored');
+    await expect(
+      generatedModule.modestaReadFetchResponseBody(
+        {
+          status: 200,
+          headers: {
+            get: (name: string) =>
+              name === 'content-type' ? 'application/octet-stream' : null,
+          },
+          arrayBuffer,
+          text: unusedText,
+        },
+        undefined,
+        new Map([['application/octet-stream', arrayBufferSerializer]])
+      )
+    ).resolves.toBe(responsePayload);
+    expect(arrayBuffer).toHaveBeenCalledTimes(1);
+    expect(unusedText).not.toHaveBeenCalled();
+    expect(arrayBufferSerializer.deserialize).toHaveBeenCalledWith(
+      responsePayload
+    );
 
     const emptyText = vi.fn(async () => 'ignored');
     await expect(
-      generatedModule.modestaReadFetchResponseBody({
-        status: 204,
-        headers: {
-          get: () => null,
+      generatedModule.modestaReadFetchResponseBody(
+        {
+          status: 204,
+          headers: {
+            get: () => null,
+          },
+          text: emptyText,
         },
-        text: emptyText,
-      })
+        undefined,
+        generatedModule.modestaDefaultSerializers
+      )
     ).resolves.toBeUndefined();
     expect(emptyText).not.toHaveBeenCalled();
   });
@@ -950,6 +1089,178 @@ describe('operation definition generation', () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(1);
     expect(json).toHaveBeenCalledTimes(1);
     expect(text).not.toHaveBeenCalled();
+  });
+
+  it('uses the generated response content type when fetch omits the response header', async () => {
+    const json = vi.fn(async () => ({ id: '42', source: 'route' }));
+    const fetchImplementation = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: {
+        get: () => null,
+      },
+      json,
+      text: async () => JSON.stringify(await json()),
+    }));
+    const sender = generatedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: fetchImplementation,
+    });
+    const accessor = generatedModule.create_GetRouteValue_accessor(sender);
+
+    await expect(
+      accessor.get({
+        id: '42',
+      })
+    ).resolves.toEqual({
+      id: '42',
+      source: 'route',
+    });
+
+    expect(json).toHaveBeenCalledTimes(1);
+  });
+
+  it('selects custom fetch serializers by normalized content type', async () => {
+    const textSerializer = {
+      deserialize: vi.fn((payloadData: unknown) => ({
+        decoded: String(payloadData),
+      })),
+      payloadType: 'string',
+      serialize: vi.fn((value: unknown) => `encoded:${String(value)}`),
+    };
+    const fetchImplementation = vi.fn(
+      async (input: URL, init?: RequestInit) => {
+        if (String(input) === 'https://api.example.com/text/tenant') {
+          expect(init?.body).toBe('encoded:payload');
+          return {
+            ok: true,
+            status: 204,
+            statusText: 'No Content',
+            headers: {
+              get: () => null,
+            },
+            text: async () => '',
+          };
+        }
+
+        expect(String(input)).toBe('https://api.example.com/plain-message');
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: {
+            get: (name: string) =>
+              name === 'content-type' ? 'text/plain; charset=utf-8' : null,
+          },
+          text: async () => 'hello',
+        };
+      }
+    );
+    const sender = edgeCaseGeneratedModule.createFetchSender({
+      baseUrl: 'https://api.example.com',
+      fetch: fetchImplementation,
+      serializers: new Map([['Text/Plain; charset=utf-8', textSerializer]]),
+    });
+    const textRequestAccessor =
+      edgeCaseGeneratedModule.create_CreateScopedText_accessor(sender);
+    const textResponseAccessor =
+      edgeCaseGeneratedModule.create_GetPlainMessage_accessor(sender);
+
+    await expect(
+      textRequestAccessor.post({
+        body: 'payload',
+        scope: 'tenant',
+      })
+    ).resolves.toBeUndefined();
+    await expect(textResponseAccessor.get()).resolves.toEqual({
+      decoded: 'hello',
+    });
+
+    expect(textSerializer.serialize).toHaveBeenCalledWith('payload');
+    expect(textSerializer.deserialize).toHaveBeenCalledWith('hello');
+  });
+
+  it('uses the current origin for fetch-based sender when baseUrl is omitted', async () => {
+    const restoreLocation = replaceGlobalProperty('location', {
+      origin: 'https://current.example',
+    });
+    const json = vi.fn(async () => ({
+      id: '42',
+      source: 'route',
+    }));
+    const text = vi.fn(async () => JSON.stringify(await json()));
+    const fetchImplementation = vi.fn(
+      async (input: URL, init?: RequestInit) => {
+        expect(String(input)).toBe('https://current.example/route/42');
+        expect(init).toEqual({
+          method: 'GET',
+          headers: {
+            accept: 'application/json',
+          },
+        });
+
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: {
+            get: (name: string) =>
+              name === 'content-type' ? 'application/json' : null,
+          },
+          json,
+          text,
+        };
+      }
+    );
+    const restoreFetch = replaceGlobalProperty('fetch', fetchImplementation);
+
+    try {
+      const sender = generatedModule.createFetchSender();
+      const accessor = generatedModule.create_GetRouteValue_accessor(sender);
+
+      await expect(
+        accessor.get({
+          id: '42',
+        })
+      ).resolves.toEqual({
+        id: '42',
+        source: 'route',
+      });
+    } finally {
+      restoreFetch();
+      restoreLocation();
+    }
+
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+    expect(json).toHaveBeenCalledTimes(1);
+    expect(text).not.toHaveBeenCalled();
+  });
+
+  it('requires baseUrl when the current origin is unavailable', async () => {
+    const restoreLocation = replaceGlobalProperty('location', undefined);
+    const fetchImplementation = vi.fn(async () => {
+      throw new Error('Unexpected fetch call.');
+    });
+
+    try {
+      const sender = generatedModule.createFetchSender({
+        fetch: fetchImplementation,
+      });
+      const accessor = generatedModule.create_GetRouteValue_accessor(sender);
+
+      await expect(
+        accessor.get({
+          id: '42',
+        })
+      ).rejects.toThrow(
+        'Base URL is not available. Pass baseUrl explicitly outside browser-like environments.'
+      );
+    } finally {
+      restoreLocation();
+    }
+
+    expect(fetchImplementation).not.toHaveBeenCalled();
   });
 
   it('emits runtime helpers that short-circuit empty response header projections', () => {
@@ -1072,6 +1383,7 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -1118,6 +1430,7 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -1159,6 +1472,7 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -1219,6 +1533,7 @@ describe('operation definition generation', () => {
           xApiKey: 'body-key',
           name: 'alpha',
         },
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
@@ -1450,6 +1765,7 @@ describe('operation definition generation', () => {
           accept: 'application/json',
         },
         body: undefined,
+        responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },

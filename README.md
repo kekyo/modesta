@@ -102,7 +102,7 @@ export type AccessorSender =  /* ... */;
 export interface CreateFetchSenderOptions { /* ... */ }
 
 export const createFetchSender = (
-  options: CreateFetchSenderOptions
+  options?: CreateFetchSenderOptions | undefined
 ): AccessorSender => {
   /* ... (helper implementation is generated here) */
 };
@@ -272,6 +272,7 @@ Import and use those definitions from the generated file.
 
 1. First, create a "Sender function". It works as the transport used to access the remote API.
    In most cases, `createFetchSender()` is enough. Internally, this function uses the fetch API to access the remote API.
+   In browsers, omitting `baseUrl` resolves requests against the current `globalThis.location.origin`. In Node.js and similar environments, pass `baseUrl` explicitly.
 2. Pass the Sender function to each accessor factory function to create an accessor interface instance.
 3. The accessor interface defines a TypeScript representation of the remote API, so API access is completed by calling those functions.
 
@@ -383,10 +384,11 @@ const createMyCustomSender = (): AccessorSenderWithContext<MyApiContext> => {
     });
   };
 };
+```
 
-//  :
-//  :
+Once you've defined the Sender factory, you can use it to generate and use accessors:
 
+```typescript
 // Create the custom Sender function
 const sender = createMyCustomSender();
 
@@ -417,8 +419,8 @@ const result = await summaries.get(
 - A Sender function that returns `AccessorSender` does not require an additional context value. API calls do not need to specify context either.
   `createFetchSender()` returns this interface type, so API calls do not need to specify a context value.
 - If you want stricter transport-side typing, you can still add explicit parameter annotations to the lambda and call `axios.request<TResponse>()`.
-- If a custom transport expects a serialized payload, use `modestaSerializeRequestBody(request)` for the outgoing body.
-  If you already have a fetch-compatible `Response`, `modestaReadFetchResponseBody(response)` can be combined with `modestaProjectResponse()`.
+- If a custom transport expects a serialized payload, use `modestaSerializeRequestBody(request, serializers)` for the outgoing body.
+  If you already have a fetch-compatible `Response`, `modestaReadFetchResponseBody(response, request.responseContentType, serializers)` can be combined with `modestaProjectResponse()`.
 
 ---
 

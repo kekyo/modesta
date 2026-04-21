@@ -314,6 +314,7 @@ describe('Huma platform integration', () => {
         },
         method: 'GET',
         operationName: 'GetRouteValue.get',
+        responseContentType: 'application/json',
         responseHeaders: [],
         url: '/route/42',
         wrapResponseBody: false,
@@ -336,6 +337,7 @@ describe('Huma platform integration', () => {
         },
         method: 'GET',
         operationName: 'GetPage.get',
+        responseContentType: 'application/json',
         responseHeaders: [],
         url: '/query?page-size=20',
         wrapResponseBody: false,
@@ -359,6 +361,7 @@ describe('Huma platform integration', () => {
         },
         method: 'GET',
         operationName: 'GetHeaderValue.get',
+        responseContentType: 'application/json',
         responseHeaders: [],
         url: '/header',
         wrapResponseBody: false,
@@ -384,6 +387,7 @@ describe('Huma platform integration', () => {
         },
         method: 'POST',
         operationName: 'CreateItem.post',
+        responseContentType: 'application/json',
         responseHeaders: [],
         url: '/body',
         wrapResponseBody: false,
@@ -415,6 +419,7 @@ describe('Huma platform integration', () => {
         },
         method: 'POST',
         operationName: 'CreateCombinedItem.post',
+        responseContentType: 'application/json',
         responseHeaders: [],
         url: '/combined/42?page-size=20',
         wrapResponseBody: false,
@@ -480,13 +485,12 @@ describe('Huma platform integration', () => {
                 ? 'application/json'
                 : null,
         },
-        json: async () => ({
-          value: 'alpha',
-        }),
         ok: true,
         status: 200,
         statusText: 'OK',
-        text: async () => '',
+        json: async () => ({
+          value: 'alpha',
+        }),
       })),
     });
     const accessor = generatedModule.create_GetDocument_accessor(sender);

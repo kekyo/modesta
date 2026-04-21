@@ -737,8 +737,11 @@ describe('operation definition generation', () => {
         '  AccessorSenderInterface,',
         '  AccessorSenderInterfaceWithContext,',
         '  AccessorSenderWithContext,',
+        '  CustomJsonSerializerOptions,',
+        '  CustomJsonSerializerResult,',
         '  create_CreateItem_accessor,',
         '  create_DeleteItem_accessor,',
+        '  createCustomJsonSerializer,',
         '  createFetchSender,',
         '  modestaDefaultSerializers,',
         '  modestaProjectResponse,',
@@ -800,6 +803,28 @@ describe('operation definition generation', () => {
         'create_DeleteItem_accessor(fetchSenderWithOptions);',
         '// @ts-expect-error accessor factories no longer accept interface context arguments',
         "create_DeleteItem_accessor(fetchSender, 'trace-42');",
+        '',
+        'const customJsonResult: CustomJsonSerializerResult = { result: undefined };',
+        'const customJsonOptions: CustomJsonSerializerOptions = {',
+        '  trySerialize: (value, ref) => {',
+        '    ref.result = value;',
+        '    return false;',
+        '  },',
+        '  tryDeserialize: (value, ref) => {',
+        '    ref.result = value;',
+        '    return false;',
+        '  },',
+        '};',
+        'customJsonOptions.trySerialize(undefined, customJsonResult);',
+        'const customJsonSerializer = createCustomJsonSerializer(customJsonOptions);',
+        'const customSerializerSender: AccessorSenderInterface = {',
+        "  serializers: new Map([['application/json', customJsonSerializer]]),",
+        '  send: async <TResponse>(',
+        '    _request: AccessorRequestDescriptor,',
+        '    _options: AccessorOptions | undefined',
+        "  ): Promise<TResponse> => 'ok' as unknown as TResponse,",
+        '};',
+        'create_CreateItem_accessor(customSerializerSender);',
         '',
       ].join('\n'),
     });
@@ -1029,6 +1054,77 @@ describe('operation definition generation', () => {
       )
     ).resolves.toBeUndefined();
     expect(emptyText).not.toHaveBeenCalled();
+  });
+
+  it('provides a custom JSON serializer hook helper', () => {
+    const date = new Date('2024-01-02T03:04:05.000Z');
+    const trySerialize = vi.fn((value: unknown, ref: { result: unknown }) => {
+      if (value instanceof Date) {
+        ref.result = {
+          type: 'date-time',
+          value: value.toISOString(),
+        };
+        return true;
+      }
+      return false;
+    });
+    const tryDeserialize = vi.fn((value: unknown, ref: { result: unknown }) => {
+      if (
+        typeof value === 'object' &&
+        value != null &&
+        (value as Record<string, unknown>).type === 'date-time' &&
+        typeof (value as Record<string, unknown>).value === 'string'
+      ) {
+        ref.result = new Date((value as Record<string, string>).value);
+        return true;
+      }
+      return false;
+    });
+    const serializer = generatedModule.createCustomJsonSerializer({
+      tryDeserialize,
+      trySerialize,
+    });
+
+    const serialized = serializer.serialize({
+      nested: {
+        recordedAt: date,
+      },
+      value: 'alpha',
+    });
+
+    expect(serializer.payloadType).toBe('string');
+    expect(serialized).toBe(
+      JSON.stringify({
+        nested: {
+          recordedAt: {
+            type: 'date-time',
+            value: '2024-01-02T03:04:05.000Z',
+          },
+        },
+        value: 'alpha',
+      })
+    );
+    expect(trySerialize).toHaveBeenCalledWith(date, expect.any(Object));
+
+    const deserialized = serializer.deserialize(serialized) as {
+      nested: {
+        recordedAt: Date;
+      };
+      value: string;
+    };
+
+    expect(deserialized.value).toBe('alpha');
+    expect(deserialized.nested.recordedAt).toBeInstanceOf(Date);
+    expect(deserialized.nested.recordedAt.toISOString()).toBe(
+      '2024-01-02T03:04:05.000Z'
+    );
+    expect(tryDeserialize).toHaveBeenCalledWith(
+      {
+        type: 'date-time',
+        value: '2024-01-02T03:04:05.000Z',
+      },
+      expect.any(Object)
+    );
   });
 
   it('provides a fetch-based sender helper', async () => {

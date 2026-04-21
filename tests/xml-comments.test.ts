@@ -271,6 +271,14 @@ describe('xml comments integration', () => {
       generatedSource,
       'AccessorSenderSerializer'
     );
+    const customJsonSerializerResultBlock = getInterfaceBlock(
+      generatedSource,
+      'CustomJsonSerializerResult'
+    );
+    const customJsonSerializerOptionsBlock = getInterfaceBlock(
+      generatedSource,
+      'CustomJsonSerializerOptions'
+    );
     const senderInterfaceBlock = getInterfaceBlock(
       generatedSource,
       'AccessorSenderInterface'
@@ -431,6 +439,65 @@ describe('xml comments integration', () => {
     expect(
       getConstDocumentation(generatedSource, 'modestaDefaultSerializers')
     ).toBe('/** Default serializers keyed by media type. */');
+    expect(
+      getInterfaceDocumentation(generatedSource, 'CustomJsonSerializerResult')
+    ).toBe(
+      [
+        '/**',
+        ' * Result holder passed to custom JSON conversion hooks.',
+        ' */',
+      ].join('\n')
+    );
+    expectMemberDocumentation(
+      customJsonSerializerResultBlock,
+      'result',
+      '/** Converted value returned from a hook when the hook reports that it handled the input. */'
+    );
+    expect(
+      getInterfaceDocumentation(generatedSource, 'CustomJsonSerializerOptions')
+    ).toBe(
+      [
+        '/**',
+        ' * Options that configure custom JSON value conversions.',
+        ' */',
+      ].join('\n')
+    );
+    expectMemberDocumentation(
+      customJsonSerializerOptionsBlock,
+      'trySerialize',
+      [
+        '/**',
+        '   * Tries to convert a body value before JSON serialization.',
+        '   * @param value Candidate value.',
+        '   * @param ref Result holder that receives the converted value.',
+        '   * @returns true when the hook handled the value; otherwise false.',
+        '   */',
+      ].join('\n')
+    );
+    expectMemberDocumentation(
+      customJsonSerializerOptionsBlock,
+      'tryDeserialize',
+      [
+        '/**',
+        '   * Tries to convert a parsed JSON value after JSON deserialization.',
+        '   * @param value Candidate parsed JSON value.',
+        '   * @param ref Result holder that receives the converted value.',
+        '   * @returns true when the hook handled the value; otherwise false.',
+        '   */',
+      ].join('\n')
+    );
+    expect(
+      getConstDocumentation(generatedSource, 'createCustomJsonSerializer')
+    ).toBe(
+      [
+        '/**',
+        ' * Creates a JSON serializer with custom value conversion hooks.',
+        ' * @param options Options that configure custom JSON value conversions.',
+        ' * @returns JSON serializer that can be registered for JSON-compatible media types.',
+        ' * @remarks A hook handles a value by writing `ref.result` and returning true. Returning false keeps the original value.',
+        ' */',
+      ].join('\n')
+    );
     expect(
       getTypeAliasDocumentation(generatedSource, 'AccessorSenderFunction')
     ).toBe(

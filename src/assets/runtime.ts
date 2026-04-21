@@ -674,6 +674,119 @@ export const modestaReadFetchResponseBody = (
 /////////////////////////////////////////////////////////////////////////////////
 
 /**
+ * Result holder passed to custom JSON conversion hooks.
+ */
+export interface CustomJsonSerializerResult {
+  /** Converted value returned from a hook when the hook reports that it handled the input. */
+  result: unknown;
+}
+
+/**
+ * Options that configure custom JSON value conversions.
+ */
+export interface CustomJsonSerializerOptions {
+  /**
+   * Tries to convert a body value before JSON serialization.
+   * @param value Candidate value.
+   * @param ref Result holder that receives the converted value.
+   * @returns true when the hook handled the value; otherwise false.
+   */
+  readonly trySerialize: (value: unknown, ref: CustomJsonSerializerResult) => boolean;
+  /**
+   * Tries to convert a parsed JSON value after JSON deserialization.
+   * @param value Candidate parsed JSON value.
+   * @param ref Result holder that receives the converted value.
+   * @returns true when the hook handled the value; otherwise false.
+   */
+  readonly tryDeserialize: (value: unknown, ref: CustomJsonSerializerResult) => boolean;
+}
+
+const modestaApplyCustomJsonSerialization = (
+  value: unknown,
+  options: CustomJsonSerializerOptions,
+  scratchBuffer: CustomJsonSerializerResult,
+  parents: WeakSet<object>
+): unknown => {
+  scratchBuffer.result = undefined;
+  if (options.trySerialize(value, scratchBuffer)) {
+    return scratchBuffer.result;
+  }
+
+  if (value == null || typeof value !== 'object') {
+    return value;
+  }
+  if (typeof (value as { readonly toJSON?: unknown }).toJSON === 'function') {
+    return value;
+  }
+  if (parents.has(value)) {
+    throw new TypeError('Converting circular structure to JSON');
+  }
+
+  parents.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) =>
+        modestaApplyCustomJsonSerialization(
+          item,
+          options,
+          scratchBuffer,
+          parents
+        )
+      );
+    }
+
+    const source = value as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    for (const key of Object.keys(source)) {
+      result[key] = modestaApplyCustomJsonSerialization(
+        source[key],
+        options,
+        scratchBuffer,
+        parents
+      );
+    }
+    return result;
+  } finally {
+    parents.delete(value);
+  }
+};
+
+/**
+ * Creates a JSON serializer with custom value conversion hooks.
+ * @param options Options that configure custom JSON value conversions.
+ * @returns JSON serializer that can be registered for JSON-compatible media types.
+ * @remarks A hook handles a value by writing `ref.result` and returning true. Returning false keeps the original value.
+ */
+export const createCustomJsonSerializer = (options: CustomJsonSerializerOptions): AccessorSenderSerializer => {
+  const scratchBuffer: CustomJsonSerializerResult = {
+    result: undefined,
+  };
+  const deserializeValue = (_key: string, value: unknown): unknown => {
+    scratchBuffer.result = undefined;
+    return options.tryDeserialize(value, scratchBuffer)
+      ? scratchBuffer.result
+      : value;
+  };
+
+  return {
+    payloadType: 'string',
+    serialize: (value: unknown) =>
+      JSON.stringify(
+        modestaApplyCustomJsonSerialization(
+          value,
+          options,
+          scratchBuffer,
+          new WeakSet()
+        )
+      ),
+    deserialize: (payloadData: unknown) =>
+      JSON.parse(String(payloadData), deserializeValue),
+  };
+};
+
+/////////////////////////////////////////////////////////////////////////////////
+
+/**
  * Creates a sender implementation backed by the fetch API.
  * @param options Options that configure the fetch-based sender.
  * @returns Sender implementation that executes requests via the fetch API.

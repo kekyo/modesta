@@ -724,15 +724,18 @@ const renderAccessorInterface = (
       context,
       operation.response
     );
+    const argsArgument =
+      argumentMode === 'none'
+        ? undefined
+        : argumentMode === 'required'
+          ? `args: ${argumentTypeExpression ?? fail(`Missing argument type for ${operation.namingSource}.`)}`
+          : withContext
+            ? `args: ${argumentTypeExpression ?? fail(`Missing argument type for ${operation.namingSource}.`)} | undefined`
+            : `args?: ${argumentTypeExpression ?? fail(`Missing argument type for ${operation.namingSource}.`)} | undefined`;
     const signature =
       argumentMode === 'none'
         ? `(${optionsArgument}) => Promise<${responseTypeExpression}>`
-        : `(${[
-            argumentMode === 'required'
-              ? `args: ${argumentTypeExpression ?? fail(`Missing argument type for ${operation.namingSource}.`)}`
-              : `args?: ${argumentTypeExpression ?? fail(`Missing argument type for ${operation.namingSource}.`)} | undefined`,
-            optionsArgument,
-          ].join(', ')}) => Promise<${responseTypeExpression}>`;
+        : `(${[argsArgument, optionsArgument].join(', ')}) => Promise<${responseTypeExpression}>`;
     const argumentDescription =
       argumentMode === 'none'
         ? undefined

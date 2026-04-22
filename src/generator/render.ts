@@ -884,14 +884,14 @@ const renderAccessorFactory = (
     )
   );
   push(
-    `export function ${accessorGroup.factoryName}(sender: AccessorSender): ${accessorGroup.interfaceName};`
+    `export function ${accessorGroup.factoryName}(sender: AccessorSenderInterface): ${accessorGroup.interfaceName};`
   );
   push(`export function ${accessorGroup.factoryName}<TAccessorContext>(`);
-  push('  sender: AccessorSenderWithContext<TAccessorContext>');
+  push('  sender: AccessorSenderInterfaceWithContext<TAccessorContext>');
   push(`): ${accessorWithContextInterfaceName}<TAccessorContext>;`);
   push(`export function ${accessorGroup.factoryName}<TAccessorContext>(`);
   push(
-    '  sender: AccessorSender | AccessorSenderWithContext<TAccessorContext>'
+    '  sender: AccessorSenderInterface | AccessorSenderInterfaceWithContext<TAccessorContext>'
   );
   push(
     `): ${accessorGroup.interfaceName} | ${accessorWithContextInterfaceName}<TAccessorContext> {`
@@ -911,7 +911,7 @@ const renderAccessorFactory = (
       operation.response
     );
     push(
-      `    ${renderPropertyName(operation.memberName)}: async (${argumentToken}) => modestaSend<${responseTypeExpression}>(sender, {`
+      `    ${renderPropertyName(operation.memberName)}: async (${argumentToken}) => sender.send<${responseTypeExpression}>({`
     );
     push(
       `      operationName: ${renderLiteral(operation.descriptorOperationName)},`
@@ -935,14 +935,6 @@ const renderAccessorFactory = (
         operation.headerParameters,
         argumentMode === 'optional'
       )}, ${operation.requestBody?.contentType != null ? renderLiteral(operation.requestBody.contentType) : 'undefined'}, ${operation.response.accept != null ? renderLiteral(operation.response.accept) : 'undefined'}),`
-    );
-    push(
-      `      body: ${renderRequestBodyArgumentExpression(
-        context,
-        operation,
-        accessorGroup,
-        argumentMode === 'optional'
-      )},`
     );
     const requestBodyMetadataName =
       schemaMetadata.getRequestBodyMetadataName(operation);
@@ -969,7 +961,14 @@ const renderAccessorFactory = (
         operation.response
       )},`
     );
-    push('    }, options),');
+    push(
+      `    }, ${renderRequestBodyArgumentExpression(
+        context,
+        operation,
+        accessorGroup,
+        argumentMode === 'optional'
+      )}, options),`
+    );
   }
 
   push(

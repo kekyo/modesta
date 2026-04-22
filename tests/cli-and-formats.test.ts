@@ -282,14 +282,17 @@ describe('CLI and format support', () => {
 
     let serializedLookupBody: unknown;
     const sender = {
-      serializers,
-      send: async (request: any) => {
+      send: async (request: any, requestValue: unknown) => {
         if (request.operationName === 'LookupSummaries.post') {
           serializedLookupBody = JSON.parse(
-            generatedModule.modestaSerializeRequestBody(request, serializers)
+            generatedModule.modestaSerializeRequestValue(
+              request,
+              requestValue,
+              serializers
+            )
           );
           const lookupResponseBody =
-            await generatedModule.modestaReadFetchResponseBody(
+            await generatedModule.modestaReadFetchResponseValue(
               {
                 status: 200,
                 headers: {
@@ -309,14 +312,17 @@ describe('CLI and format support', () => {
               serializers,
               request.responseBodyMetadata
             );
-          return generatedModule.modestaProjectResponse(request, {
-            body: lookupResponseBody,
-            getHeader: () => null,
-          });
+          return generatedModule.modestaProjectResponse(
+            request,
+            {
+              getHeader: () => null,
+            },
+            lookupResponseBody
+          );
         }
 
         const listResponseBody =
-          await generatedModule.modestaReadFetchResponseBody(
+          await generatedModule.modestaReadFetchResponseValue(
             {
               status: 200,
               headers: {
@@ -339,10 +345,13 @@ describe('CLI and format support', () => {
             serializers,
             request.responseBodyMetadata
           );
-        return generatedModule.modestaProjectResponse(request, {
-          body: listResponseBody,
-          getHeader: () => null,
-        });
+        return generatedModule.modestaProjectResponse(
+          request,
+          {
+            getHeader: () => null,
+          },
+          listResponseBody
+        );
       },
     };
 
@@ -418,23 +427,23 @@ describe('CLI and format support', () => {
     expect(generatedSource).toContain('export interface ListSummaries {');
     expect(generatedSource).toContain(
       [
-        'export function create_LookupSummaries_accessor(sender: AccessorSender): LookupSummaries;',
+        'export function create_LookupSummaries_accessor(sender: AccessorSenderInterface): LookupSummaries;',
         'export function create_LookupSummaries_accessor<TAccessorContext>(',
-        '  sender: AccessorSenderWithContext<TAccessorContext>',
+        '  sender: AccessorSenderInterfaceWithContext<TAccessorContext>',
         '): LookupSummaries_with_context<TAccessorContext>;',
         'export function create_LookupSummaries_accessor<TAccessorContext>(',
-        '  sender: AccessorSender | AccessorSenderWithContext<TAccessorContext>',
+        '  sender: AccessorSenderInterface | AccessorSenderInterfaceWithContext<TAccessorContext>',
         '): LookupSummaries | LookupSummaries_with_context<TAccessorContext> {',
       ].join('\n')
     );
     expect(generatedSource).toContain(
       [
-        'export function create_ListSummaries_accessor(sender: AccessorSender): ListSummaries;',
+        'export function create_ListSummaries_accessor(sender: AccessorSenderInterface): ListSummaries;',
         'export function create_ListSummaries_accessor<TAccessorContext>(',
-        '  sender: AccessorSenderWithContext<TAccessorContext>',
+        '  sender: AccessorSenderInterfaceWithContext<TAccessorContext>',
         '): ListSummaries_with_context<TAccessorContext>;',
         'export function create_ListSummaries_accessor<TAccessorContext>(',
-        '  sender: AccessorSender | AccessorSenderWithContext<TAccessorContext>',
+        '  sender: AccessorSenderInterface | AccessorSenderInterfaceWithContext<TAccessorContext>',
         '): ListSummaries | ListSummaries_with_context<TAccessorContext> {',
       ].join('\n')
     );
@@ -504,12 +513,12 @@ describe('CLI and format support', () => {
     expect(stdout).toContain('export interface ListSummaries {');
     expect(stdout).toContain(
       [
-        'export function create_LookupSummaries_accessor(sender: AccessorSender): LookupSummaries;',
+        'export function create_LookupSummaries_accessor(sender: AccessorSenderInterface): LookupSummaries;',
         'export function create_LookupSummaries_accessor<TAccessorContext>(',
-        '  sender: AccessorSenderWithContext<TAccessorContext>',
+        '  sender: AccessorSenderInterfaceWithContext<TAccessorContext>',
         '): LookupSummaries_with_context<TAccessorContext>;',
         'export function create_LookupSummaries_accessor<TAccessorContext>(',
-        '  sender: AccessorSender | AccessorSenderWithContext<TAccessorContext>',
+        '  sender: AccessorSenderInterface | AccessorSenderInterfaceWithContext<TAccessorContext>',
         '): LookupSummaries | LookupSummaries_with_context<TAccessorContext> {',
       ].join('\n')
     );

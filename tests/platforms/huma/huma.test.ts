@@ -34,6 +34,11 @@ describe('Huma platform integration', () => {
       },
     },
   };
+  const createMockSender = (
+    implementation: ((...args: any[]) => unknown) | undefined
+  ) => ({
+    send: vi.fn(implementation ?? (async (request: unknown) => request)),
+  });
 
   beforeAll(async () => {
     const result = await fetchOpenApiFromPlatformServer({
@@ -307,15 +312,14 @@ describe('Huma platform integration', () => {
   });
 
   it('builds sender descriptors for route parameters', async () => {
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor = generatedModule.create_GetRouteValue_accessor(sender);
     const signal = new AbortController().signal;
 
     await accessor.get({ id: '42' }, { signal });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
-        body: undefined,
         headers: {
           accept: 'application/json',
         },
@@ -327,19 +331,19 @@ describe('Huma platform integration', () => {
         url: '/route/42',
         wrapResponseBody: false,
       },
+      undefined,
       { signal }
     );
   });
 
   it('builds sender descriptors for query parameters', async () => {
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor = generatedModule.create_GetPage_accessor(sender);
 
     await accessor.get({ pageSize: 20 });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
-        body: undefined,
         headers: {
           accept: 'application/json',
         },
@@ -351,19 +355,19 @@ describe('Huma platform integration', () => {
         url: '/query?page-size=20',
         wrapResponseBody: false,
       },
+      undefined,
       undefined
     );
   });
 
   it('builds sender descriptors for header parameters', async () => {
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor = generatedModule.create_GetHeaderValue_accessor(sender);
 
     await accessor.get({ xApiKey: 'secret' });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
-        body: undefined,
         headers: {
           'x-api-key': 'secret',
           accept: 'application/json',
@@ -376,21 +380,19 @@ describe('Huma platform integration', () => {
         url: '/header',
         wrapResponseBody: false,
       },
+      undefined,
       undefined
     );
   });
 
   it('builds sender descriptors for JSON body parameters', async () => {
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor = generatedModule.create_CreateItem_accessor(sender);
 
     await accessor.post({ name: 'alpha' });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
-        body: {
-          name: 'alpha',
-        },
         headers: {
           'content-type': 'application/json',
           accept: 'application/json',
@@ -404,12 +406,15 @@ describe('Huma platform integration', () => {
         url: '/body',
         wrapResponseBody: false,
       },
+      {
+        name: 'alpha',
+      },
       undefined
     );
   });
 
   it('builds sender descriptors for combined path, query, header, and body parameters', async () => {
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor = generatedModule.create_CreateCombinedItem_accessor(sender);
 
     await accessor.post({
@@ -419,11 +424,8 @@ describe('Huma platform integration', () => {
       xApiKey: 'secret',
     });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
-        body: {
-          name: 'alpha',
-        },
         headers: {
           'content-type': 'application/json',
           'x-api-key': 'secret',
@@ -438,12 +440,15 @@ describe('Huma platform integration', () => {
         url: '/combined/42?page-size=20',
         wrapResponseBody: false,
       },
+      {
+        name: 'alpha',
+      },
       undefined
     );
   });
 
   it('builds sender descriptors for Huma text/plain request bodies', async () => {
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor = generatedModule.create_CreateScopedText_accessor(sender);
 
     await accessor.post({
@@ -452,9 +457,8 @@ describe('Huma platform integration', () => {
       xTraceId: 'trace-1',
     });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
-        body: 'hello',
         headers: {
           'content-type': 'text/plain',
           'x-trace-id': 'trace-1',
@@ -465,12 +469,13 @@ describe('Huma platform integration', () => {
         url: '/text/tenant%20a',
         wrapResponseBody: false,
       },
+      'hello',
       undefined
     );
   });
 
   it('preserves URL encoding for path and query parameters', async () => {
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor = generatedModule.create_UpdateNumbers_accessor(sender);
 
     await accessor.put({
@@ -479,10 +484,11 @@ describe('Huma platform integration', () => {
       scope: 'tenant a/b',
     });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       expect.objectContaining({
         url: '/numbers/tenant%20a%2Fb?dry-run=true',
       }),
+      [1, 2],
       undefined
     );
   });

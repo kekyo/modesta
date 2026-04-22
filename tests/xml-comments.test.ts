@@ -342,11 +342,6 @@ describe('xml comments integration', () => {
     );
     expectMemberDocumentation(
       requestDescriptorBlock,
-      'body',
-      '/** Request body payload passed to the sender. */'
-    );
-    expectMemberDocumentation(
-      requestDescriptorBlock,
       'requestBodyMetadata',
       '/** Schema metadata for the request body payload. */'
     );
@@ -441,7 +436,11 @@ describe('xml comments integration', () => {
     expectMemberDocumentation(
       senderSerializationBlock,
       'payloadType',
-      '/** Serialized payload data shape used by this serializer. */'
+      [
+        '/**',
+        '   * Serialized payload data shape used by this serializer.',
+        '   */',
+      ].join('\n')
     );
     expectMemberDocumentation(
       senderSerializationBlock,
@@ -542,15 +541,6 @@ describe('xml comments integration', () => {
       ].join('\n')
     );
     expect(
-      getTypeAliasDocumentation(generatedSource, 'AccessorSenderFunction')
-    ).toBe(
-      [
-        '/**',
-        ' * @deprecated Use `AccessorSenderInterface` instead.',
-        ' */',
-      ].join('\n')
-    );
-    expect(
       getInterfaceDocumentation(generatedSource, 'AccessorSenderInterface')
     ).toBe(
       [
@@ -561,26 +551,16 @@ describe('xml comments integration', () => {
     );
     expectMemberDocumentation(
       senderInterfaceBlock,
-      'serializers',
-      '/** Serialization hooks keyed by normalized media type. */'
-    );
-    expect(getTypeAliasDocumentation(generatedSource, 'AccessorSender')).toBe(
+      'send',
       [
         '/**',
-        ' * Sender implementation used by generated accessors that do not require per-call context values.',
-        ' */',
-      ].join('\n')
-    );
-    expect(
-      getTypeAliasDocumentation(
-        generatedSource,
-        'AccessorSenderFunctionWithContext'
-      )
-    ).toBe(
-      [
-        '/**',
-        ' * @deprecated Use `AccessorSenderInterfaceWithContext` instead.',
-        ' */',
+        '   * Executes a prepared request.',
+        '   * @typeParam TResponse Response payload type.',
+        '   * @param request Prepared request descriptor.',
+        '   * @param requestValue Request value, before serialization.',
+        '   * @param accessorOptions Additional accessor call options without per-call context.',
+        '   * @returns Promise that resolves to the typed response value after serialization.',
+        '   */',
       ].join('\n')
     );
     expect(
@@ -598,18 +578,22 @@ describe('xml comments integration', () => {
     );
     expectMemberDocumentation(
       senderInterfaceWithContextBlock,
-      'serializers',
-      '/** Serialization hooks keyed by normalized media type. */'
-    );
-    expect(
-      getTypeAliasDocumentation(generatedSource, 'AccessorSenderWithContext')
-    ).toBe(
+      'send',
       [
         '/**',
-        ' * Sender implementation used by generated accessors that require per-call context values.',
-        ' * @typeParam TAccessorContext Per-call context value type passed to the sender.',
-        ' */',
+        '   * Executes a prepared request.',
+        '   * @typeParam TResponse Response payload type.',
+        '   * @param request Prepared request descriptor.',
+        '   * @param requestValue Request value, before serialization.',
+        '   * @param accessorOptions Additional accessor call options with per-call context.',
+        '   * @returns Promise that resolves to the typed response value after serialization.',
+        '   */',
       ].join('\n')
+    );
+    expect(generatedSource).not.toContain('AccessorSenderFunction');
+    expect(generatedSource).not.toContain('export type AccessorSender =');
+    expect(generatedSource).not.toContain(
+      'export type AccessorSenderWithContext'
     );
     expect(generatedSource).not.toContain(
       'export type AccessorContextArgument'
@@ -688,11 +672,6 @@ describe('xml comments integration', () => {
     );
     expectMemberDocumentation(
       modestaPreparedRequestBlock,
-      'body',
-      '/** Original request body payload before transport-specific serialization. */'
-    );
-    expectMemberDocumentation(
-      modestaPreparedRequestBlock,
       'signal',
       '/** Abort signal forwarded from the accessor call options. */'
     );
@@ -709,11 +688,6 @@ describe('xml comments integration', () => {
       modestaResponseSourceBlock,
       'getHeader',
       '/** Function that reads a response header value by its wire name. */'
-    );
-    expectMemberDocumentation(
-      modestaResponseSourceBlock,
-      'body',
-      '/** Parsed or transport-native response body value. */'
     );
 
     expect(getConstDocumentation(generatedSource, 'createFetchSender')).toBe(
@@ -738,17 +712,18 @@ describe('xml comments integration', () => {
         ' * @param accessorOptions Additional accessor call options passed to the sender.',
         ' * @param options Options that configure request preparation.',
         ' * @returns Request values resolved against the active base URL.',
-        ' * @remarks The returned `body` is not serialized. Use `modestaSerializeRequestBody()` when a transport expects a serialized payload.',
+        ' * @remarks The returned request does not include request body data. Sender implementations receive the request value separately.',
         ' */',
       ].join('\n')
     );
     expect(
-      getConstDocumentation(generatedSource, 'modestaSerializeRequestBody')
+      getConstDocumentation(generatedSource, 'modestaSerializeRequestValue')
     ).toBe(
       [
         '/**',
-        ' * Serializes a request body using the accessor request content type.',
+        ' * Serializes a request value using the accessor request content type.',
         ' * @param request Prepared request descriptor emitted by the generated accessor.',
+        ' * @param requestValue Request value before serialization.',
         ' * @param serializers Serialization hooks keyed by media type.',
         ' * @returns Serialized body value for fetch-style transports, or undefined when the request has no body.',
         ' * @remarks A body is serialized when a serializer matches the request content type. Other body values are returned as-is.',
@@ -760,27 +735,47 @@ describe('xml comments integration', () => {
     ).toBe(
       [
         '/**',
-        ' * Projects a transport response into the generated accessor response shape.',
-        ' * @typeParam TResponse Response payload type.',
+        ' * Projects a transport response into the generated accessor response value shape.',
+        ' * @typeParam TResponse Response value type.',
         ' * @param request Prepared request descriptor emitted by the generated accessor.',
-        ' * @param response Transport response values used to project response headers and body.',
+        ' * @param response Transport response values used to project response headers.',
+        ' * @param responseValue Response value after deserialization.',
         ' * @returns Response value that matches the generated accessor contract.',
         ' * @remarks Response headers defined by the accessor are parsed and merged into the returned body shape.',
         ' */',
       ].join('\n')
     );
     expect(
-      getConstDocumentation(generatedSource, 'modestaReadFetchResponseBody')
+      getConstDocumentation(
+        generatedSource,
+        'modestaDeserializeResponsePayload'
+      )
     ).toBe(
       [
         '/**',
-        ' * Reads a response body from a fetch-compatible response object.',
+        ' * Reads a response value.',
+        ' * @param response Response source.',
+        ' * @param responsePayload Response payload data before deserialization.',
+        ' * @param contentType Expected response content type used when the response omits the content-type header.',
+        ' * @param serializers Serialization hooks keyed by media type.',
+        ' * @param metadata Schema metadata for the response body payload.',
+        ' * @returns Deserialized response value, or the payload coerced to string when no serializer matches.',
+        ' * @remarks A body is deserialized when a serializer matches the response content type. The payload is passed to the serializer as-is, including `undefined`.',
+        ' */',
+      ].join('\n')
+    );
+    expect(
+      getConstDocumentation(generatedSource, 'modestaReadFetchResponseValue')
+    ).toBe(
+      [
+        '/**',
+        ' * Fetch API specialized: Reads a response value from a fetch-compatible response object.',
         ' * @param response Fetch-compatible response object.',
         ' * @param contentType Expected response content type used when the response omits the content-type header.',
         ' * @param serializers Serialization hooks keyed by media type.',
         ' * @param metadata Schema metadata for the response body payload.',
-        ' * @returns Parsed response body value, or undefined for empty responses.',
-        ' * @remarks A body is deserialized when a serializer matches the response content type. Other bodies are read with `response.text()`.',
+        ' * @returns Parsed response body deserialized value, or undefined for empty responses.',
+        ' * @remarks A body is deserialized when a serializer matches the response content type.',
         ' */',
       ].join('\n')
     );

@@ -294,6 +294,12 @@ describe('operation definition generation', () => {
     );
   });
 
+  const createMockSender = (
+    implementation: ((...args: any[]) => unknown) | undefined
+  ) => ({
+    send: vi.fn(implementation ?? (async (request: unknown) => request)),
+  });
+
   it('flattens route parameter definitions into argument groups', () => {
     const argumentsBlock = getInterfaceBlock(
       generatedSource,
@@ -393,12 +399,12 @@ describe('operation definition generation', () => {
     );
     expect(generatedSource).toContain(
       [
-        'export function create_GetRouteValue_accessor(sender: AccessorSender): GetRouteValue;',
+        'export function create_GetRouteValue_accessor(sender: AccessorSenderInterface): GetRouteValue;',
         'export function create_GetRouteValue_accessor<TAccessorContext>(',
-        '  sender: AccessorSenderWithContext<TAccessorContext>',
+        '  sender: AccessorSenderInterfaceWithContext<TAccessorContext>',
         '): GetRouteValue_with_context<TAccessorContext>;',
         'export function create_GetRouteValue_accessor<TAccessorContext>(',
-        '  sender: AccessorSender | AccessorSenderWithContext<TAccessorContext>',
+        '  sender: AccessorSenderInterface | AccessorSenderInterfaceWithContext<TAccessorContext>',
         '): GetRouteValue | GetRouteValue_with_context<TAccessorContext> {',
       ].join('\n')
     );
@@ -493,14 +499,17 @@ describe('operation definition generation', () => {
         'import {',
         '  AccessorOptionsWithContext,',
         '  AccessorRequestDescriptor,',
-        '  AccessorSenderWithContext,',
+        '  AccessorSenderInterfaceWithContext,',
         '  create_OptionalLogin_accessor,',
         "} from './generated.ts';",
         '',
-        'const senderWithContext: AccessorSenderWithContext<{ requestId: string }> = async <TResponse>(',
-        '  _request: AccessorRequestDescriptor,',
-        '  options: AccessorOptionsWithContext<{ requestId: string }>',
-        '): Promise<TResponse> => options.context as unknown as TResponse;',
+        'const senderWithContext: AccessorSenderInterfaceWithContext<{ requestId: string }> = {',
+        '  send: async <TResponse>(',
+        '    _request: AccessorRequestDescriptor,',
+        '    _requestValue: unknown,',
+        '    options: AccessorOptionsWithContext<{ requestId: string }>',
+        '  ): Promise<TResponse | undefined> => options.context as unknown as TResponse,',
+        '};',
         '',
         'const accessor = create_OptionalLogin_accessor(senderWithContext);',
         "accessor.post(undefined, { context: { requestId: 'request-99' } });",
@@ -513,7 +522,7 @@ describe('operation definition generation', () => {
   });
 
   it('builds sender descriptors for route parameters', async () => {
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor = generatedModule.create_GetRouteValue_accessor(sender);
     const signal = new AbortController().signal;
 
@@ -524,7 +533,7 @@ describe('operation definition generation', () => {
       { signal }
     );
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
         operationName: 'GetRouteValue.get',
         method: 'GET',
@@ -532,24 +541,24 @@ describe('operation definition generation', () => {
         headers: {
           accept: 'application/json',
         },
-        body: undefined,
         responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
+      undefined,
       { signal }
     );
   });
 
   it('builds sender descriptors for query parameters', async () => {
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor = generatedModule.create_GetPage_accessor(sender);
 
     await accessor.get({
       pageSize: 20,
     });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
         operationName: 'GetPage.get',
         method: 'GET',
@@ -557,26 +566,29 @@ describe('operation definition generation', () => {
         headers: {
           accept: 'application/json',
         },
-        body: undefined,
         responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
+      undefined,
       undefined
     );
   });
 
   it('builds sender descriptors for operations without arguments', async () => {
-    const sender = vi.fn(async (request: unknown, options: unknown) => ({
-      request,
-      options,
-    }));
+    const sender = createMockSender(
+      async (request: unknown, requestValue: unknown, options: unknown) => ({
+        options,
+        request,
+        requestValue,
+      })
+    );
     const accessor = generatedModule.create_ListItems_accessor(sender);
     const signal = new AbortController().signal;
 
     await accessor.get({ signal });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
         operationName: 'ListItems.get',
         method: 'GET',
@@ -584,24 +596,24 @@ describe('operation definition generation', () => {
         headers: {
           accept: 'application/json',
         },
-        body: undefined,
         responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
+      undefined,
       { signal }
     );
   });
 
   it('builds sender descriptors for header parameters', async () => {
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor = generatedModule.create_GetHeaderValue_accessor(sender);
 
     await accessor.get({
       xApiKey: 'secret',
     });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
         operationName: 'GetHeaderValue.get',
         method: 'GET',
@@ -610,17 +622,17 @@ describe('operation definition generation', () => {
           'x-api-key': 'secret',
           accept: 'application/json',
         },
-        body: undefined,
         responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
+      undefined,
       undefined
     );
   });
 
   it('builds sender descriptors for combined path, query, and header parameters', async () => {
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor = generatedModule.create_GetCombinedValue_accessor(sender);
 
     await accessor.get({
@@ -629,7 +641,7 @@ describe('operation definition generation', () => {
       xApiKey: 'secret',
     });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
         operationName: 'GetCombinedValue.get',
         method: 'GET',
@@ -638,24 +650,24 @@ describe('operation definition generation', () => {
           'x-api-key': 'secret',
           accept: 'application/json',
         },
-        body: undefined,
         responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
+      undefined,
       undefined
     );
   });
 
   it('builds sender descriptors for body parameters', async () => {
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor = generatedModule.create_CreateItem_accessor(sender);
 
     await accessor.post({
       name: 'alpha',
     });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
         operationName: 'CreateItem.post',
         method: 'POST',
@@ -664,12 +676,12 @@ describe('operation definition generation', () => {
           'content-type': 'application/json',
           accept: 'application/json',
         },
-        body: {
-          name: 'alpha',
-        },
         responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
+      },
+      {
+        name: 'alpha',
       },
       undefined
     );
@@ -677,8 +689,9 @@ describe('operation definition generation', () => {
 
   it('passes per-call context values to sender calls when requested by the sender type', async () => {
     const signal = new AbortController().signal;
-    const sender = vi.fn(
-      async (_request: unknown, options: unknown) => options
+    const sender = createMockSender(
+      async (_request: unknown, _requestValue: unknown, options: unknown) =>
+        options
     );
     const accessor = generatedModule.create_CreateItem_accessor(sender);
 
@@ -694,7 +707,7 @@ describe('operation definition generation', () => {
       }
     );
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
         operationName: 'CreateItem.post',
         method: 'POST',
@@ -703,12 +716,12 @@ describe('operation definition generation', () => {
           'content-type': 'application/json',
           accept: 'application/json',
         },
-        body: {
-          name: 'alpha',
-        },
         responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
+      },
+      {
+        name: 'alpha',
       },
       {
         context: {
@@ -720,7 +733,7 @@ describe('operation definition generation', () => {
   });
 
   it('builds sender descriptors for combined path, query, header, and body parameters', async () => {
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor = generatedModule.create_CreateCombinedItem_accessor(sender);
 
     await accessor.post({
@@ -730,7 +743,7 @@ describe('operation definition generation', () => {
       name: 'alpha',
     });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
         operationName: 'CreateCombinedItem.post',
         method: 'POST',
@@ -740,20 +753,21 @@ describe('operation definition generation', () => {
           'content-type': 'application/json',
           accept: 'application/json',
         },
-        body: {
-          name: 'alpha',
-        },
         responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
+      },
+      {
+        name: 'alpha',
       },
       undefined
     );
   });
 
   it('does not pass interface context values to sender calls', async () => {
-    const sender = vi.fn(
-      async (_request: unknown, options: unknown) => options
+    const sender = createMockSender(
+      async (_request: unknown, _requestValue: unknown, options: unknown) =>
+        options
     );
     const accessor = generatedModule.create_DeleteItem_accessor(sender);
 
@@ -761,28 +775,30 @@ describe('operation definition generation', () => {
       id: '42',
     });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
         operationName: 'DeleteItem._delete',
         method: 'DELETE',
         url: '/items/42',
         headers: {},
-        body: undefined,
         responseHeaders: [],
         wrapResponseBody: false,
       },
+      undefined,
       undefined
     );
   });
 
-  it('emits sender interfaces and deprecated function compatibility aliases', () => {
+  it('emits sender interfaces without function compatibility aliases', () => {
     expect(generatedSource).toContain(
       "export type PayloadType = 'string' | 'ArrayBuffer';"
     );
     expect(generatedSource).toContain(
       [
         'export interface AccessorSenderSerializer {',
-        '  /** Serialized payload data shape used by this serializer. */',
+        '  /**',
+        '   * Serialized payload data shape used by this serializer.',
+        '   */',
         '  readonly payloadType: PayloadType;',
         '  /**',
         '   * Serializes a request body value into transport data.',
@@ -803,23 +819,44 @@ describe('operation definition generation', () => {
     );
     expect(generatedSource).toContain(
       [
-        '/**',
-        ' * @deprecated Use `AccessorSenderInterface` instead.',
-        ' */',
-        'export type AccessorSenderFunction = <TResponse>(',
-        '  request: AccessorRequestDescriptor,',
-        '  options: AccessorOptions | undefined) => Promise<TResponse>;',
+        'export interface AccessorSenderInterface {',
+        '  /**',
+        '   * Executes a prepared request.',
+        '   * @typeParam TResponse Response payload type.',
+        '   * @param request Prepared request descriptor.',
+        '   * @param requestValue Request value, before serialization.',
+        '   * @param accessorOptions Additional accessor call options without per-call context.',
+        '   * @returns Promise that resolves to the typed response value after serialization.',
+        '   */',
+        '  readonly send: <TResponse>(',
+        '    request: AccessorRequestDescriptor,',
+        '    requestValue: unknown,',
+        '    accessorOptions: AccessorOptions | undefined) => Promise<TResponse | undefined>;',
+        '}',
       ].join('\n')
-    );
-    expect(generatedSource).toContain(
-      'export type AccessorSender = AccessorSenderFunction | AccessorSenderInterface;'
     );
     expect(generatedSource).toContain(
       [
-        'export type AccessorSenderWithContext<TAccessorContext> =',
-        '  | AccessorSenderFunctionWithContext<TAccessorContext>',
-        '  | AccessorSenderInterfaceWithContext<TAccessorContext>;',
+        'export interface AccessorSenderInterfaceWithContext<TAccessorContext> {',
+        '  /**',
+        '   * Executes a prepared request.',
+        '   * @typeParam TResponse Response payload type.',
+        '   * @param request Prepared request descriptor.',
+        '   * @param requestValue Request value, before serialization.',
+        '   * @param accessorOptions Additional accessor call options with per-call context.',
+        '   * @returns Promise that resolves to the typed response value after serialization.',
+        '   */',
+        '  readonly send: <TResponse>(',
+        '    request: AccessorRequestDescriptor,',
+        '    requestValue: unknown,',
+        '    accessorOptions: AccessorOptionsWithContext<TAccessorContext>) => Promise<TResponse | undefined>;',
+        '}',
       ].join('\n')
+    );
+    expect(generatedSource).not.toContain('AccessorSenderFunction');
+    expect(generatedSource).not.toContain('export type AccessorSender =');
+    expect(generatedSource).not.toContain(
+      'export type AccessorSenderWithContext'
     );
   });
 
@@ -838,50 +875,45 @@ describe('operation definition generation', () => {
         '  AccessorOptions,',
         '  AccessorRequestDescriptor,',
         '  AccessorSchemaMetadata,',
-        '  AccessorSender,',
         '  AccessorSenderInterface,',
         '  AccessorSenderInterfaceWithContext,',
-        '  AccessorSenderWithContext,',
         '  CustomJsonSerializerOptions,',
         '  CustomJsonSerializerResult,',
         '  create_CreateItem_accessor,',
         '  create_DeleteItem_accessor,',
         '  createCustomJsonSerializer,',
         '  createFetchSender,',
-        '  modestaDefaultSerializers,',
         '  modestaProjectResponse,',
         "} from './generated.ts';",
         '',
-        'const sender: AccessorSender = async <TResponse>(',
-        '  _request: AccessorRequestDescriptor,',
-        '  _options: AccessorOptions | undefined',
-        "): Promise<TResponse> => 'ok' as unknown as TResponse;",
+        'const sender: AccessorSenderInterface = {',
+        '  send: async <TResponse>(',
+        '    _request: AccessorRequestDescriptor,',
+        '    _requestValue: unknown,',
+        '    _options: AccessorOptions | undefined',
+        "  ): Promise<TResponse | undefined> => 'ok' as unknown as TResponse,",
+        '};',
         '',
         'const deleteAccessor = create_DeleteItem_accessor(sender);',
         "deleteAccessor._delete({ id: '42' });",
         '// @ts-expect-error accessor factories no longer accept interface context arguments',
         "create_DeleteItem_accessor(sender, 'trace-42');",
         '',
-        'const senderFromLambda: AccessorSender = async (request, _options) =>',
-        '  modestaProjectResponse(request, {',
-        "    body: 'ok',",
+        'const senderFromProjection: AccessorSenderInterface = {',
+        '  send: async <TResponse>(request: AccessorRequestDescriptor) =>',
+        '  modestaProjectResponse<TResponse>(request, {',
         '    getHeader: () => null,',
-        '  });',
-        'create_DeleteItem_accessor(senderFromLambda);',
+        "  }, 'ok'),",
+        '};',
+        'create_DeleteItem_accessor(senderFromProjection);',
         '',
-        'const senderFromObject: AccessorSenderInterface = {',
-        '  serializers: modestaDefaultSerializers,',
+        'const senderWithContext: AccessorSenderInterfaceWithContext<{ requestId: string }> = {',
         '  send: async <TResponse>(',
         '    _request: AccessorRequestDescriptor,',
-        '    _options: AccessorOptions | undefined',
-        "  ): Promise<TResponse> => 'ok' as unknown as TResponse,",
+        '    _requestValue: unknown,',
+        '    options: AccessorOptionsWithContext<{ requestId: string }>',
+        '  ): Promise<TResponse | undefined> => options.context as unknown as TResponse,',
         '};',
-        'create_DeleteItem_accessor(senderFromObject);',
-        '',
-        'const senderWithContext: AccessorSenderWithContext<{ requestId: string }> = async <TResponse>(',
-        '  _request: AccessorRequestDescriptor,',
-        '  options: AccessorOptionsWithContext<{ requestId: string }>',
-        '): Promise<TResponse> => options.context as unknown as TResponse;',
         '',
         'const createAccessor = create_CreateItem_accessor(senderWithContext);',
         "createAccessor.post({ name: 'alpha' }, { context: { requestId: 'request-99' } });",
@@ -891,11 +923,11 @@ describe('operation definition generation', () => {
         "create_CreateItem_accessor(senderWithContext, 'trace-42');",
         '',
         'const senderWithContextFromObject: AccessorSenderInterfaceWithContext<{ requestId: string }> = {',
-        '  serializers: modestaDefaultSerializers,',
         '  send: async <TResponse>(',
         '    _request: AccessorRequestDescriptor,',
+        '    _requestValue: unknown,',
         '    options: AccessorOptionsWithContext<{ requestId: string }>',
-        '  ): Promise<TResponse> => options.context as unknown as TResponse,',
+        '  ): Promise<TResponse | undefined> => options.context as unknown as TResponse,',
         '};',
         'const createAccessorFromObject = create_CreateItem_accessor(senderWithContextFromObject);',
         "createAccessorFromObject.post({ name: 'alpha' }, { context: { requestId: 'request-99' } });",
@@ -931,11 +963,11 @@ describe('operation definition generation', () => {
         '};',
         'customJsonSerializer.serialize({ value: undefined }, customJsonMetadata);',
         'const customSerializerSender: AccessorSenderInterface = {',
-        "  serializers: new Map([['application/json', customJsonSerializer]]),",
         '  send: async <TResponse>(',
         '    _request: AccessorRequestDescriptor,',
+        '    _requestValue: unknown,',
         '    _options: AccessorOptions | undefined',
-        "  ): Promise<TResponse> => 'ok' as unknown as TResponse,",
+        "  ): Promise<TResponse | undefined> => 'ok' as unknown as TResponse,",
         '};',
         'create_CreateItem_accessor(customSerializerSender);',
         '',
@@ -958,7 +990,6 @@ describe('operation definition generation', () => {
         'content-type': 'application/json',
         accept: 'application/json',
       },
-      body: requestBody,
       responseHeaders: [],
       wrapResponseBody: false,
     };
@@ -982,12 +1013,12 @@ describe('operation definition generation', () => {
         'content-type': 'application/json',
         accept: 'application/json',
       },
-      body: requestBody,
       signal,
     });
     expect(
-      generatedModule.modestaSerializeRequestBody(
+      generatedModule.modestaSerializeRequestValue(
         request,
+        requestBody,
         generatedModule.modestaDefaultSerializers
       )
     ).toBe(JSON.stringify(requestBody));
@@ -1000,8 +1031,9 @@ describe('operation definition generation', () => {
       })),
     };
     expect(
-      generatedModule.modestaSerializeRequestBody(
+      generatedModule.modestaSerializeRequestValue(
         request,
+        requestBody,
         new Map([['application/json', customSerializer]])
       )
     ).toEqual({
@@ -1013,7 +1045,6 @@ describe('operation definition generation', () => {
         {
           ...request,
           headers: {},
-          body: undefined,
         },
         undefined,
         {
@@ -1024,7 +1055,6 @@ describe('operation definition generation', () => {
       url: new URL('https://api.example.com/body'),
       method: 'POST',
       headers: undefined,
-      body: undefined,
       signal: undefined,
     });
   });
@@ -1041,7 +1071,6 @@ describe('operation definition generation', () => {
         headers: {
           accept: 'application/json',
         },
-        body: undefined,
         responseHeaders: [
           {
             name: 'etag',
@@ -1052,9 +1081,9 @@ describe('operation definition generation', () => {
         wrapResponseBody: false,
       },
       {
-        body: responseBody,
         getHeader: (name: string) => (name === 'etag' ? 'etag-42' : null),
-      }
+      },
+      responseBody
     );
 
     expect(projectedObjectResponse).toBe(responseBody);
@@ -1070,7 +1099,6 @@ describe('operation definition generation', () => {
           method: 'GET',
           url: '/rate-limits',
           headers: {},
-          body: undefined,
           responseHeaders: [
             {
               name: 'x-rate-limit-history',
@@ -1082,10 +1110,10 @@ describe('operation definition generation', () => {
           wrapResponseBody: true,
         },
         {
-          body: [1, 2, 3],
           getHeader: (name: string) =>
             name === 'x-rate-limit-history' ? '7, 5, 3' : null,
-        }
+        },
+        [1, 2, 3]
       )
     ).toEqual({
       body: [1, 2, 3],
@@ -1093,7 +1121,7 @@ describe('operation definition generation', () => {
     });
   });
 
-  it('provides a public fetch response body reader helper', async () => {
+  it('provides public response payload reader helpers', async () => {
     const responseBody = {
       id: '42',
       source: 'helper',
@@ -1107,7 +1135,7 @@ describe('operation definition generation', () => {
     const text = vi.fn(async () => responseText);
 
     await expect(
-      generatedModule.modestaReadFetchResponseBody(
+      generatedModule.modestaReadFetchResponseValue(
         {
           status: 200,
           headers: {
@@ -1132,7 +1160,7 @@ describe('operation definition generation', () => {
     const arrayBuffer = vi.fn(async () => responsePayload);
     const unusedText = vi.fn(async () => 'ignored');
     await expect(
-      generatedModule.modestaReadFetchResponseBody(
+      generatedModule.modestaReadFetchResponseValue(
         {
           status: 200,
           headers: {
@@ -1154,7 +1182,7 @@ describe('operation definition generation', () => {
 
     const emptyText = vi.fn(async () => 'ignored');
     await expect(
-      generatedModule.modestaReadFetchResponseBody(
+      generatedModule.modestaReadFetchResponseValue(
         {
           status: 204,
           headers: {
@@ -1167,6 +1195,19 @@ describe('operation definition generation', () => {
       )
     ).resolves.toBeUndefined();
     expect(emptyText).not.toHaveBeenCalled();
+
+    expect(
+      generatedModule.modestaDeserializeResponsePayload(
+        {
+          getHeader: (name: string) =>
+            name === 'content-type' ? 'application/json' : null,
+        },
+        responseText,
+        undefined,
+        new Map([['application/json', serializer]]),
+        undefined
+      )
+    ).toEqual(responseBody);
   });
 
   it('provides a custom JSON serializer hook helper', () => {
@@ -1589,7 +1630,7 @@ describe('operation definition generation', () => {
       ])
     );
 
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor =
       edgeCaseGeneratedModule.create_GetDuplicateParameters_accessor(sender);
 
@@ -1599,7 +1640,7 @@ describe('operation definition generation', () => {
       header_id: 'header-42',
     });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
         operationName: 'GetDuplicateParameters.get',
         method: 'GET',
@@ -1608,11 +1649,11 @@ describe('operation definition generation', () => {
           id: 'header-42',
           accept: 'application/json',
         },
-        body: undefined,
         responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
+      undefined,
       undefined
     );
   });
@@ -1637,7 +1678,7 @@ describe('operation definition generation', () => {
       ])
     );
 
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor =
       edgeCaseGeneratedModule.create_GetNormalizedCollision_accessor(sender);
 
@@ -1646,7 +1687,7 @@ describe('operation definition generation', () => {
       header_xApiKey: 'header-key',
     });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
         operationName: 'GetNormalizedCollision.get',
         method: 'GET',
@@ -1655,11 +1696,11 @@ describe('operation definition generation', () => {
           'x.api.key': 'header-key',
           accept: 'application/json',
         },
-        body: undefined,
         responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
+      undefined,
       undefined
     );
   });
@@ -1678,7 +1719,7 @@ describe('operation definition generation', () => {
     expect(argumentsBlock).not.toContain('@remarks Duplicated argument name');
     expect(getEdgeCaseWarnings('GetNormalizedDistinct')).toEqual([]);
 
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor =
       edgeCaseGeneratedModule.create_GetNormalizedDistinct_accessor(sender);
 
@@ -1688,7 +1729,7 @@ describe('operation definition generation', () => {
       tenantId: 'header-42',
     });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
         operationName: 'GetNormalizedDistinct.get',
         method: 'GET',
@@ -1697,11 +1738,11 @@ describe('operation definition generation', () => {
           'tenant.id': 'header-42',
           accept: 'application/json',
         },
-        body: undefined,
         responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
+      undefined,
       undefined
     );
   });
@@ -1732,7 +1773,7 @@ describe('operation definition generation', () => {
       ])
     );
 
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor = edgeCaseGeneratedModule.create_CreateItem_accessor(sender);
 
     await accessor.post({
@@ -1744,7 +1785,7 @@ describe('operation definition generation', () => {
       header_xApiKey: 'header-key',
     });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
         operationName: 'CreateItem.post',
         method: 'POST',
@@ -1754,14 +1795,14 @@ describe('operation definition generation', () => {
           'content-type': 'application/json',
           accept: 'application/json',
         },
-        body: {
-          id: 'body-42',
-          xApiKey: 'body-key',
-          name: 'alpha',
-        },
         responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
+      },
+      {
+        id: 'body-42',
+        xApiKey: 'body-key',
+        name: 'alpha',
       },
       undefined
     );
@@ -1772,7 +1813,7 @@ describe('operation definition generation', () => {
       'const modestaExcludedProperties_CreateItem_post = ["path_id","query_xApiKey","header_xApiKey"];'
     );
     expect(edgeCaseGeneratedSource).toContain(
-      'body: modestaExcludeProperties(args, modestaExcludedProperties_CreateItem_post),'
+      '}, modestaExcludeProperties(args, modestaExcludedProperties_CreateItem_post), options),'
     );
   });
 
@@ -1784,12 +1825,12 @@ describe('operation definition generation', () => {
       'CreateText_post_request_envelope'
     );
 
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor = edgeCaseGeneratedModule.create_CreateText_accessor(sender);
 
     await accessor.post('alpha');
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
         operationName: 'CreateText.post',
         method: 'POST',
@@ -1797,10 +1838,10 @@ describe('operation definition generation', () => {
         headers: {
           'content-type': 'text/plain',
         },
-        body: 'alpha',
         responseHeaders: [],
         wrapResponseBody: false,
       },
+      'alpha',
       undefined
     );
   });
@@ -1815,7 +1856,7 @@ describe('operation definition generation', () => {
       'readonly post: (args: CreateScopedText_post_request_envelope & CreateScopedText_post_arguments, options?: AccessorOptions | undefined) => Promise<void>;'
     );
 
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor =
       edgeCaseGeneratedModule.create_CreateScopedText_accessor(sender);
 
@@ -1825,7 +1866,7 @@ describe('operation definition generation', () => {
       body: 'payload',
     });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
         operationName: 'CreateScopedText.post',
         method: 'POST',
@@ -1834,10 +1875,10 @@ describe('operation definition generation', () => {
           'x-trace-id': 'trace-42',
           'content-type': 'text/plain',
         },
-        body: 'payload',
         responseHeaders: [],
         wrapResponseBody: false,
       },
+      'payload',
       undefined
     );
   });
@@ -1868,13 +1909,13 @@ describe('operation definition generation', () => {
       ].join('\n')
     );
 
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor =
       edgeCaseGeneratedModule.create_CreateNumberList_accessor(sender);
 
     await accessor.post([1, 2, 3]);
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
         operationName: 'CreateNumberList.post',
         method: 'POST',
@@ -1882,7 +1923,6 @@ describe('operation definition generation', () => {
         headers: {
           'content-type': 'application/json',
         },
-        body: [1, 2, 3],
         requestBodyMetadata: {
           items: {
             format: 'int32',
@@ -1892,6 +1932,7 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
+      [1, 2, 3],
       undefined
     );
   });
@@ -1908,7 +1949,7 @@ describe('operation definition generation', () => {
       'readonly put: (args: UpdateNumbers_put_request_envelope & UpdateNumbers_put_arguments, options?: AccessorOptions | undefined) => Promise<void>;'
     );
 
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor =
       edgeCaseGeneratedModule.create_UpdateNumbers_accessor(sender);
 
@@ -1918,7 +1959,7 @@ describe('operation definition generation', () => {
       body: [1, 2, 3],
     });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
         operationName: 'UpdateNumbers.put',
         method: 'PUT',
@@ -1926,7 +1967,6 @@ describe('operation definition generation', () => {
         headers: {
           'content-type': 'application/json',
         },
-        body: [1, 2, 3],
         requestBodyMetadata: {
           items: {
             format: 'int32',
@@ -1936,6 +1976,7 @@ describe('operation definition generation', () => {
         responseHeaders: [],
         wrapResponseBody: false,
       },
+      [1, 2, 3],
       undefined
     );
   });
@@ -1983,7 +2024,7 @@ describe('operation definition generation', () => {
   });
 
   it('preserves URL encoding for path and query parameters in generated sender descriptors', async () => {
-    const sender = vi.fn(async (request: unknown) => request);
+    const sender = createMockSender(undefined);
     const accessor =
       edgeCaseGeneratedModule.create_GetNormalizedDistinct_accessor(sender);
 
@@ -1993,7 +2034,7 @@ describe('operation definition generation', () => {
       user_id: 'route/42 alpha?',
     });
 
-    expect(sender).toHaveBeenCalledWith(
+    expect(sender.send).toHaveBeenCalledWith(
       {
         operationName: 'GetNormalizedDistinct.get',
         method: 'GET',
@@ -2002,11 +2043,11 @@ describe('operation definition generation', () => {
           'tenant.id': 'tenant#1',
           accept: 'application/json',
         },
-        body: undefined,
         responseContentType: 'application/json',
         responseHeaders: [],
         wrapResponseBody: false,
       },
+      undefined,
       undefined
     );
   });

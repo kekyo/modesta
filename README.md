@@ -316,112 +316,6 @@ These parameters are type-safe because they are defined as TypeScript types conv
 
 You can also pass an `AbortSignal` as shown above to request cancellation of the API call.
 
-## Custom Sender Functions and Context Values
-
-In some cases, you may want to use another transport implementation instead of the fetch API.
-Examples include libraries such as axios, or transports such as WebSocket.
-
-With modesta, you can replace the Sender function to use any transport layer.
-
-You can also define a custom Sender function to pass a "context value", an out-of-band value used during API calls.
-Context values can be used to add values that are not specified by Swagger, such as request headers or flags that adjust send/receive behavior.
-
-The following example uses `axios` as the transport and requires an additional parameter set for every API call:
-
-```typescript
-import axios from 'axios';
-import {
-  create_ListSummaries_accessor,
-  modestaPrepareRequest,
-  modestaProjectResponse,
-  type AccessorSenderWithContext,
-} from './generated/accessors';
-
-// A context value passed for each accessor function call
-interface MyApiContext {
-  baseUrl: string;    // Allows a different base URL for each API call
-  authToken: string;  // Authentication token
-  requestId: string;  // Request ID for each API call
-}
-
-// Define a Sender factory that uses a custom transport layer
-// MyApiContext is used as the context value
-const createMyCustomSender = (): AccessorSenderWithContext<MyApiContext> => {
-  return async (request, accessorOptions) => {
-    // Collect request information
-    const preparedRequest = modestaPrepareRequest(request, accessorOptions, {
-      baseUrl: accessorOptions.context.baseUrl,  // Base URL
-      headers: {
-        authorization: `Bearer ${accessorOptions.context.authToken}`,  // Authentication token
-      },
-    });
-
-    // axios: Execute the call
-    const response = await axios.request<unknown>({
-      url: preparedRequest.url.href,
-      method: preparedRequest.method,
-      headers: {
-        ...preparedRequest.headers,
-        'x-request-id': accessorOptions.context.requestId,  // Insert request ID
-      },
-      data: preparedRequest.body,
-      signal: preparedRequest.signal,
-    });
-
-    // Build the result value
-    return modestaProjectResponse(request, {
-      body: response.data,
-      getHeader: (name) => {
-        const value = response.headers[name.toLowerCase()];
-        // axios: If the value is an array, concatenate the elements separated by commas;
-        // otherwise, treat it as a string.
-        return Array.isArray(value)
-          ? value.join(', ')
-          : value == null
-            ? null
-            : String(value);
-      },
-    });
-  };
-};
-```
-
-Once you've defined the Sender factory, you can use it to generate and use accessors:
-
-```typescript
-// Create the custom Sender function
-const sender = createMyCustomSender();
-
-//  :
-//  :
-
-// Generate an accessor for the API by specifying the Sender function
-const summaries = create_ListSummaries_accessor(sender);
-
-// Invoke the accessor method
-const result = await summaries.get(
-  // Parameters defined by Swagger
-  {
-    region: 'apac',
-  },
-  {
-    // MyApiContext must be provided for each accessor method call
-    context: {
-      baseUrl,
-      authToken: bearerToken,
-      requestId: 'request-99',
-    },
-  }
-);
-```
-
-- A Sender function that returns `AccessorSenderWithContext<TContext>` uses `TContext` as the context type and can force API calls to specify that context.
-- A Sender function that returns `AccessorSender` does not require an additional context value. API calls do not need to specify context either.
-  `createFetchSender()` returns this interface type, so API calls do not need to specify a context value.
-- If you want stricter transport-side typing, you can still add explicit parameter annotations to the lambda and call `axios.request<TResponse>()`.
-- If a custom transport expects a serialized payload, use `modestaSerializeRequestBody(request, serializers)` for the outgoing body.
-  If you already have a fetch-compatible `Response`, `modestaReadFetchResponseBody(response, request.responseContentType, serializers)` can be combined with `modestaProjectResponse()`.
-
 ---
 
 ## Proxy Code Generation Rules
@@ -513,6 +407,121 @@ Generated files start with a header like this:
 - Only `path`, `query`, and `header` parameter locations are supported.
 - A path with no literal segment cannot be named unless `operationId` is present.
 - Name collisions after normalization result in an error.
+
+---
+
+## Custom Sender Functions and Context Values (Advanced Topic)
+
+In some cases, you may want to use another transport implementation instead of the fetch API.
+Examples include libraries such as axios, or transports such as WebSocket.
+
+With modesta, you can replace the Sender function to use any transport layer.
+
+You can also define a custom Sender function to pass a "context value", an out-of-band value used during API calls.
+Context values can be used to add values that are not specified by Swagger, such as request headers or flags that adjust send/receive behavior.
+
+The following example uses `axios` as the transport and requires an additional parameter set for every API call:
+
+```typescript
+import axios from 'axios';
+import {
+  create_ListSummaries_accessor,
+  modestaDefaultSerializers,
+  modestaPrepareRequest,
+  modestaProjectResponse,
+  type AccessorSenderInterfaceWithContext,
+} from './generated/accessors';
+
+// A context value passed for each accessor function call
+interface MyApiContext {
+  baseUrl: string;    // Allows a different base URL for each API call
+  authToken: string;  // Authentication token
+  requestId: string;  // Request ID for each API call
+}
+
+// Define a Sender factory that uses a custom transport layer
+// MyApiContext is used as the context value
+const createMyCustomSender = (): AccessorSenderInterfaceWithContext<MyApiContext> => {
+  return {
+    // Serializers to use (default)
+    serializers: modestaDefaultSerializers,
+
+    // Send function
+    send: async (request, accessorOptions) => {
+      // Collect request information
+      const preparedRequest = modestaPrepareRequest(request, accessorOptions, {
+        baseUrl: accessorOptions.context.baseUrl,  // Base URL
+        headers: {
+          authorization: `Bearer ${accessorOptions.context.authToken}`,  // Authentication token
+        },
+      });
+
+      // axios: Execute the call
+      const response = await axios.request({
+        url: preparedRequest.url.href,
+        method: preparedRequest.method,
+        headers: {
+          ...preparedRequest.headers,
+          'x-request-id': accessorOptions.context.requestId,  // Insert request ID
+        },
+        data: preparedRequest.body,
+        signal: preparedRequest.signal,
+      });
+
+      // Build the result value
+      return modestaProjectResponse(request, {
+        body: response.data,
+        getHeader: (name) => {
+          const value = response.headers[name.toLowerCase()];
+          // axios: If the value is an array, concatenate the elements separated by commas;
+          // otherwise, treat it as a string.
+          return Array.isArray(value)
+            ? value.join(', ')
+            : value == null
+              ? null
+              : String(value);
+        },
+      });
+    },
+  };
+};
+```
+
+Once you've defined the Sender factory, you can use it to generate and use accessors:
+
+```typescript
+// Create the custom Sender
+const sender = createMyCustomSender();
+
+//  :
+//  :
+
+// Generate an accessor for the API by specifying the custom Sender
+const summaries = create_ListSummaries_accessor(sender);
+
+// Invoke the accessor method
+const result = await summaries.get(
+  // Parameters defined by Swagger
+  {
+    region: 'apac',
+  },
+  {
+    // MyApiContext must be provided for each accessor method call
+    context: {
+      baseUrl,
+      authToken: bearerToken,
+      requestId: 'request-99',
+    },
+  }
+);
+```
+
+- A Sender factory that returns `AccessorSenderInterfaceWithContext<TContext>` uses `TContext` as the context type and can force API calls to specify that context.
+- A Sender factory that returns `AccessorSenderInterface` does not require an additional context value. API calls do not need to specify context either.
+  `createFetchSender()` returns this interface type, so API calls do not need to specify a context value.
+- If you want stricter transport-side typing, you can still add explicit parameter annotations to the lambda and call `axios.request<TResponse>()`.
+- If a custom transport expects a serialized payload, use `modestaSerializeRequestBody(request, serializers)` for the outgoing body.
+  If you already have a fetch-compatible `Response`, `modestaReadFetchResponseBody(response, request.responseContentType, serializers)` can be combined with `modestaProjectResponse()`.
 
 ---
 

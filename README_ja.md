@@ -315,111 +315,6 @@ const result = await summaries.get({
 
 また、上記のように `AbortSignal` を追加で渡すことで、API呼び出しのキャンセル要求も実現できます。
 
-## 独自Sender関数とコンテキスト値
-
-場合によっては、fetch APIではなく、別のトランスポート実装を使いたい場合があります。
-例えば、axiosのようなライブラリや、WebSocketを使用する場合などです。
-
-modestaでは、Sender関数を差し替えることで、任意のトランスポート層を使用することが出来ます。
-
-また、カスタムのSender関数を定義すれば、API呼び出しの際にout-of-band valueとなる「コンテキスト値」を渡すことが出来ます。
-コンテキスト値は、Swaggerで指定されないような追加の値をリクエストヘッダに与えたり、送受信データの調整フラグの指定に使用することが出来ます。
-
-以下の例は、トランスポートに `axios` を使い、API呼び出し毎に追加のパラメータ群を必ず指定させる例です:
-
-```typescript
-import axios from 'axios';
-import {
-  create_ListSummaries_accessor,
-  modestaPrepareRequest,
-  modestaProjectResponse,
-  type AccessorSenderWithContext,
-} from './generated/accessors';
-
-// アクセサ関数呼び出し毎に渡す context value
-interface MyApiContext {
-  baseUrl: string;    // API呼び出し毎に異なるベースURLを指定可能にする
-  authToken: string;  // 認証トークン
-  requestId: string;  // API呼び出し毎のリクエストID
-}
-
-// 独自のトランスポート層を使うSenderファクトリを定義する
-// MyApiContextをコンテキスト値として使用する
-const createMyCustomSender = (): AccessorSenderWithContext<MyApiContext> => {
-  return async (request, accessorOptions) => {
-    // リクエストの情報を収集する
-    const preparedRequest = modestaPrepareRequest(request, accessorOptions, {
-      baseUrl: accessorOptions.context.baseUrl,  // ベースURLの指定
-      headers: {
-        authorization: `Bearer ${accessorOptions.context.authToken}`,  // 認証トークン
-      },
-    });
-
-    // axios: 呼び出しを実行する
-    const response = await axios.request<unknown>({
-      url: preparedRequest.url.href,
-      method: preparedRequest.method,
-      headers: {
-        ...preparedRequest.headers,
-        'x-request-id': accessorOptions.context.requestId,  // リクエストIDの挿入
-      },
-      data: preparedRequest.body,
-      signal: preparedRequest.signal,
-    });
-
-    // 結果値を構築する
-    return modestaProjectResponse(request, {
-      body: response.data,
-      getHeader: (name) => {
-        const value = response.headers[name.toLowerCase()];
-        // axios: 値が配列の場合はカンマ区切りで連結し、それ以外は文字列とする
-        return Array.isArray(value)
-          ? value.join(', ')
-          : value == null
-            ? null
-            : String(value);
-      },
-    });
-  };
-};
-```
-
-Senderファクトリを定義したら、それを使ってアクセサを生成して使用します:
-
-```typescript
-// カスタムSender関数の生成
-const sender = createMyCustomSender();
-
-//  :
-//  :
-
-// カスタムSender関数を指定してAPIへのアクセサを生成する
-const summaries = create_ListSummaries_accessor(sender);
-
-// アクセサ関数でAPI呼び出しを行う
-const result = await summaries.get(
-  // Swaggerで定義されているパラメータ群の指定
-  {
-    region: 'apac',
-  },
-  {
-    // アクセサ関数呼び出し時にMyApiContextを指定する必要がある
-    context: {
-      baseUrl,
-      authToken: bearerToken,
-      requestId: 'request-99',
-    },
-  }
-);
-```
-
-- `AccessorSenderWithContext<TContext>` を返すSender関数は、`TContext` がコンテキスト型を示し、API呼び出しでこのコンテキストを指定することを強制出来ます。
-- `AccessorSender` を返すSender関数は、追加のコンテキスト値を要求しません。API呼び出しでもコンテキスト値の指定が不要となります。
-  `createFetchSender()` はこのインターフェイス型を返すため、API呼び出しでコンテキスト値を指定する必要がありません。
-- トランスポート層でも厳密な型指定を行いたい場合は、ラムダの引数型を明示した上で `axios.request<TResponse>()` を呼び出すこともできます。
-- 独自トランスポートがシリアライズ済み payload を要求する場合は、送信 body に `modestaSerializeRequestBody(request, serializers)` を使用することが出来ます。
-  既に fetch 互換の `Response` を扱っている場合は、`modestaReadFetchResponseBody(response, request.responseContentType, serializers)` と `modestaProjectResponse()` を組み合わせられます。
-
 ---
 
 ## プロキシコード生成ルール
@@ -509,6 +404,119 @@ Swaggerのスキーマは、おおむね次のようにTypeScriptへ変換され
 - パラメータ位置は `path` / `query` / `header` のみ対応しています。
 - リテラルセグメントを 1 つも持たないパスは、`operationId` が無いと命名できません。
 - 正規化後の名前が衝突する場合はエラーになります。
+
+---
+
+## 独自Sender関数とコンテキスト値 (Advanced topic)
+
+場合によっては、fetch APIではなく、別のトランスポート実装を使いたい場合があります。
+例えば、axiosのようなライブラリや、WebSocketを使用する場合などです。
+
+modestaでは、Sender関数を差し替えることで、任意のトランスポート層を使用することが出来ます。
+
+また、カスタムのSender関数を定義すれば、API呼び出しの際にout-of-band valueとなる「コンテキスト値」を渡すことが出来ます。
+コンテキスト値は、Swaggerで指定されないような追加の値をリクエストヘッダに与えたり、送受信データの調整フラグの指定に使用することが出来ます。
+
+以下の例は、トランスポートに `axios` を使い、API呼び出し毎に追加のパラメータ群を必ず指定させる例です:
+
+```typescript
+import axios from 'axios';
+import {
+  create_ListSummaries_accessor,
+  modestaPrepareRequest,
+  modestaProjectResponse,
+  type AccessorSenderWithContext,
+} from './generated/accessors';
+
+// アクセサ関数呼び出し毎に渡す context value
+interface MyApiContext {
+  baseUrl: string;    // API呼び出し毎に異なるベースURLを指定可能にする
+  authToken: string;  // 認証トークン
+  requestId: string;  // API呼び出し毎のリクエストID
+}
+
+// 独自のトランスポート層を使うSenderファクトリを定義する
+// MyApiContextをコンテキスト値として使用する
+const createMyCustomSender = (): AccessorSenderInterfaceWithContext<MyApiContext> => {
+  return {
+    // 使用するシリアライザ群（デフォルト）
+    serializers: modestaDefaultSerializers,
+
+    // Send関数
+    send: async (request, accessorOptions) => {
+      // リクエストの情報を収集する
+      const preparedRequest = modestaPrepareRequest(request, accessorOptions, {
+        baseUrl: accessorOptions.context.baseUrl,  // ベースURLの指定
+        headers: {
+          authorization: `Bearer ${accessorOptions.context.authToken}`,  // 認証トークン
+        },
+      });
+
+      // axios: 呼び出しを実行する
+      const response = await axios.request({
+        url: preparedRequest.url.href,
+        method: preparedRequest.method,
+        headers: {
+          ...preparedRequest.headers,
+          'x-request-id': accessorOptions.context.requestId,  // リクエストIDの挿入
+        },
+        data: preparedRequest.body,
+        signal: preparedRequest.signal,
+      });
+
+      // 結果値を構築する
+      return modestaProjectResponse(request, {
+        body: response.data,
+        getHeader: (name) => {
+          const value = response.headers[name.toLowerCase()];
+          // axios: 値が配列の場合はカンマ区切りで連結し、それ以外は文字列とする
+          return Array.isArray(value)
+            ? value.join(', ')
+            : value == null
+              ? null
+              : String(value);
+        },
+      });
+    },
+  };
+};
+```
+
+Senderファクトリを定義したら、それを使ってアクセサを生成して使用します:
+
+```typescript
+// カスタムSenderの生成
+const sender = createMyCustomSender();
+
+//  :
+//  :
+
+// カスタムSenderを指定してAPIへのアクセサを生成する
+const summaries = create_ListSummaries_accessor(sender);
+
+// アクセサ関数でAPI呼び出しを行う
+const result = await summaries.get(
+  // Swaggerで定義されているパラメータ群の指定
+  {
+    region: 'apac',
+  },
+  {
+    // アクセサ関数呼び出し時にMyApiContextを指定する必要がある
+    context: {
+      baseUrl,
+      authToken: bearerToken,
+      requestId: 'request-99',
+    },
+  }
+);
+```
+
+- `AccessorSenderInterfaceWithContext<TContext>` を返すSenderファクトリは、`TContext` がコンテキスト型を示し、API呼び出しでこのコンテキストを指定することを強制出来ます。
+- `AccessorSenderInterface` を返すSenderファクトリは、追加のコンテキスト値を要求しません。API呼び出しでもコンテキスト値の指定が不要となります。
+  `createFetchSender()` はこのインターフェイス型を返すため、API呼び出しでコンテキスト値を指定する必要がありません。
+- トランスポート層でも厳密な型指定を行いたい場合は、ラムダの引数型を明示した上で `axios.request<TResponse>()` を呼び出すこともできます。
+- 独自トランスポートがシリアライズ済み payload を要求する場合は、送信 body に `modestaSerializeRequestBody(request, serializers)` を使用することが出来ます。
+  既に fetch 互換の `Response` を扱っている場合は、`modestaReadFetchResponseBody(response, request.responseContentType, serializers)` と `modestaProjectResponse()` を組み合わせられます。
 
 ---
 

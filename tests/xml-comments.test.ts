@@ -759,8 +759,8 @@ describe('xml comments integration', () => {
         ' * @param contentType Expected response content type used when the response omits the content-type header.',
         ' * @param serializers Serialization hooks keyed by media type.',
         ' * @param metadata Schema metadata for the response body payload.',
-        ' * @returns Parsed response body deserialized value, or undefined for empty responses.',
-        ' * @remarks A body is deserialized when a serializer matches the response content type.',
+        ' * @returns Deserialized response value, or the payload coerced to string when no serializer matches.',
+        ' * @remarks A body is deserialized when a serializer matches the response content type. The payload is passed to the serializer as-is, including `undefined`.',
         ' */',
       ].join('\n')
     );

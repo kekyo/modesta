@@ -4,6 +4,7 @@
 // https://github.com/kekyo/modesta/
 
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { generateAccessorSource } from '../src/generator';
 import {
   generateAccessorSourceFromProject,
   getTypeScriptDiagnostics,
@@ -414,6 +415,101 @@ describe('operation definition generation', () => {
     expect(generatedSource).toContain(
       'readonly _delete: (args: DeleteItem_delete_arguments, options: AccessorOptionsWithContext<TAccessorContext>) => Promise<void>;'
     );
+  });
+
+  it('renders optional request bodies with required per-call context options', async () => {
+    const optionalBodySource = generateAccessorSource({
+      document: {
+        openapi: '3.0.3',
+        info: {
+          title: 'Optional Body',
+          version: '1.0.0',
+        },
+        paths: {
+          '/login': {
+            post: {
+              operationId: 'OptionalLogin',
+              requestBody: {
+                description: 'Login information.',
+                content: {
+                  'application/json': {
+                    schema: {
+                      $ref: '#/components/schemas/OptionalLoginRequest',
+                    },
+                  },
+                },
+              },
+              responses: {
+                '200': {
+                  description: 'OK',
+                  content: {
+                    'application/json': {
+                      schema: {
+                        $ref: '#/components/schemas/OptionalLoginResponse',
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        components: {
+          schemas: {
+            OptionalLoginRequest: {
+              type: 'object',
+              properties: {
+                name: {
+                  type: 'string',
+                },
+              },
+            },
+            OptionalLoginResponse: {
+              type: 'object',
+              properties: {
+                token: {
+                  type: 'string',
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    expect(optionalBodySource).toContain(
+      'readonly post: (args?: OptionalLoginRequest | undefined, options?: AccessorOptions | undefined) => Promise<OptionalLoginResponse>;'
+    );
+    expect(optionalBodySource).toContain(
+      'readonly post: (args: OptionalLoginRequest | undefined, options: AccessorOptionsWithContext<TAccessorContext>) => Promise<OptionalLoginResponse>;'
+    );
+    expect(optionalBodySource).not.toContain(
+      'readonly post: (args?: OptionalLoginRequest | undefined, options: AccessorOptionsWithContext<TAccessorContext>)'
+    );
+
+    const diagnostics = await getTypeScriptDiagnostics({
+      'generated.ts': optionalBodySource,
+      'consumer.ts': [
+        'import {',
+        '  AccessorOptionsWithContext,',
+        '  AccessorRequestDescriptor,',
+        '  AccessorSenderWithContext,',
+        '  create_OptionalLogin_accessor,',
+        "} from './generated.ts';",
+        '',
+        'const senderWithContext: AccessorSenderWithContext<{ requestId: string }> = async <TResponse>(',
+        '  _request: AccessorRequestDescriptor,',
+        '  options: AccessorOptionsWithContext<{ requestId: string }>',
+        '): Promise<TResponse> => options.context as unknown as TResponse;',
+        '',
+        'const accessor = create_OptionalLogin_accessor(senderWithContext);',
+        "accessor.post(undefined, { context: { requestId: 'request-99' } });",
+        "accessor.post({ name: 'alpha' }, { context: { requestId: 'request-99' } });",
+        '// @ts-expect-error options are required when the sender requires per-call context',
+        "accessor.post({ name: 'alpha' });",
+      ].join('\n'),
+    });
+    expect(diagnostics).toEqual([]);
   });
 
   it('builds sender descriptors for route parameters', async () => {

@@ -145,6 +145,8 @@ const main = async () => {
     throw new Error(`Too many positional arguments.\n\n${usage}`);
   }
 
+  logger.info(`${version}-${git_commit_hash}: Started.`);
+
   const [inputPath, outputPath] = parsed.positionals;
   const generated =
     inputPath != null

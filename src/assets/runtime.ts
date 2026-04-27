@@ -140,10 +140,17 @@ export interface AccessorSenderInterfaceWithContext<TAccessorContext> {
     accessorOptions: AccessorOptionsWithContext<TAccessorContext>) => Promise<TResponse | undefined>;
 }
 
+/**
+ * Source used to resolve generated accessor request URLs when `baseUrl` is omitted.
+ */
+export type ModestaBaseUrlSource = 'auto' | 'origin' | 'swagger';
+
 /** Options that configure the fetch-based sender. */
 export interface CreateFetchSenderOptions {
-  /** Base URL used to resolve generated accessor request URLs. Defaults to globalThis.location.origin when available. */
+  /** Explicit base URL used to resolve generated accessor request URLs. */
   readonly baseUrl?: string | URL | undefined;
+  /** Base URL source used when `baseUrl` is omitted. Defaults to `auto`. */
+  readonly baseUrlSource?: ModestaBaseUrlSource | undefined;
   /** Fetch implementation to use. Defaults to globalThis.fetch. */
   readonly fetch?: typeof fetch | undefined;
   /** Default headers merged with per-request headers. */
@@ -158,8 +165,10 @@ export interface CreateFetchSenderOptions {
  * Options that configure request preparation for custom sender implementations.
  */
 export interface ModestaPrepareRequestOptions {
-  /** Base URL used to resolve generated accessor request URLs. Defaults to globalThis.location.origin when available. */
+  /** Explicit base URL used to resolve generated accessor request URLs. */
   readonly baseUrl?: string | URL | undefined;
+  /** Base URL source used when `baseUrl` is omitted. Defaults to `auto`. */
+  readonly baseUrlSource?: ModestaBaseUrlSource | undefined;
   /** Default headers merged with per-request headers. */
   readonly headers?: Record<string, string> | undefined;
 }
@@ -204,6 +213,8 @@ export const modestaDefaultSerializers: ReadonlyMap<string, AccessorSenderSerial
 /////////////////////////////////////////////////////////////////////////////////
 
 const modestaEmptyResponseHeaders: readonly AccessorResponseHeaderDescriptor[] = [];
+
+const modestaGeneratedSwaggerBaseUrl: string | undefined = undefined;
 
 const modestaEncodeQueryComponent = (value: string) =>
   encodeURIComponent(value).replaceAll('%20', '+');
@@ -374,8 +385,55 @@ const modestaGetDefaultBaseUrl = () => {
   );
 };
 
-const modestaResolveBaseUrl = (baseUrl: string | URL | undefined) =>
-  baseUrl ?? modestaGetDefaultBaseUrl();
+const modestaResolveBaseUrl = (
+  baseUrl: string | URL | undefined,
+  baseUrlSource: ModestaBaseUrlSource | undefined
+) => {
+  if (baseUrl != null && baseUrlSource != null) {
+    throw new Error(
+      'baseUrl and baseUrlSource cannot be specified together.'
+    );
+  }
+
+  if (baseUrl != null) {
+    return baseUrl;
+  }
+
+  switch (baseUrlSource ?? 'auto') {
+    case 'origin':
+      return modestaGetDefaultBaseUrl();
+    case 'swagger':
+      if (modestaGeneratedSwaggerBaseUrl == null) {
+        throw new Error(
+          'Swagger base URL is not available. Choose baseUrlSource: "origin" or pass baseUrl explicitly.'
+        );
+      }
+      return modestaGeneratedSwaggerBaseUrl;
+    case 'auto':
+    default:
+      return modestaGeneratedSwaggerBaseUrl ?? modestaGetDefaultBaseUrl();
+  }
+};
+
+const modestaResolveRequestUrl = (
+  requestUrl: string,
+  baseUrl: string | URL | undefined,
+  baseUrlSource: ModestaBaseUrlSource | undefined
+) => {
+  const resolvedBaseUrl = String(modestaResolveBaseUrl(baseUrl, baseUrlSource));
+  const directoryBaseUrl = resolvedBaseUrl.endsWith('/')
+    ? resolvedBaseUrl
+    : `${resolvedBaseUrl}/`;
+  const relativeRequestUrl = requestUrl.replace(/^\/+/u, '');
+  try {
+    return new URL(relativeRequestUrl, directoryBaseUrl);
+  } catch {
+    return new URL(
+      relativeRequestUrl,
+      new URL(directoryBaseUrl, modestaGetDefaultBaseUrl())
+    );
+  }
+};
 
 const modestaAssignProperties = (
   target: Record<string, unknown>,
@@ -519,7 +577,11 @@ export const modestaPrepareRequest = (
   accessorOptions: AccessorOptions | undefined,
   options: ModestaPrepareRequestOptions | undefined
 ): ModestaPreparedRequest => ({
-  url: new URL(request.url, modestaResolveBaseUrl(options?.baseUrl)),
+  url: modestaResolveRequestUrl(
+    request.url,
+    options?.baseUrl,
+    options?.baseUrlSource
+  ),
   method: request.method,
   headers: modestaMergeRequestHeaders(options?.headers, request.headers),
   signal: accessorOptions?.signal,
@@ -866,7 +928,7 @@ export const createCustomJsonSerializer = (options: CustomJsonSerializerOptions)
  * @param options Options that configure the fetch-based sender.
  * @returns Sender implementation that executes requests via the fetch API.
  * @remarks When `options.fetch` is omitted, `globalThis.fetch` must be available.
- * When `options.baseUrl` is omitted, `globalThis.location.origin` must be available.
+ * When `options.baseUrl` is omitted, `options.baseUrlSource` selects the generated Swagger server URL, `globalThis.location.origin`, or both with Swagger first.
  * Per-call context values are not accepted by this sender implementation.
  */
 export const createFetchSender = (options?: CreateFetchSenderOptions | undefined): AccessorSenderInterface => {

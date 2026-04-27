@@ -251,6 +251,8 @@ describe('operation definition generation', () => {
   let generatedModule: Record<string, any>;
   let edgeCaseGeneratedSource = '';
   let edgeCaseGeneratedModule: Record<string, any>;
+  let serverGeneratedSource = '';
+  let serverGeneratedModule: Record<string, any>;
   const edgeCaseWarnings: string[] = [];
   const getEdgeCaseWarnings = (accessorName: string) =>
     edgeCaseWarnings.filter((message) =>
@@ -291,6 +293,41 @@ describe('operation definition generation', () => {
     });
     edgeCaseGeneratedModule = await transpileGeneratedSource(
       edgeCaseGeneratedSource
+    );
+    serverGeneratedSource = generateAccessorSource({
+      document: {
+        openapi: '3.0.3',
+        info: {
+          title: 'Server URL',
+          version: '1.0.0',
+        },
+        servers: [
+          {
+            url: 'https://{tenant}.example.com/foobar_svc',
+            variables: {
+              tenant: {
+                default: 'baz',
+              },
+            },
+          },
+        ],
+        paths: {
+          '/api/v2/foobar': {
+            get: {
+              operationId: 'GetFoobar',
+              responses: {
+                '204': {
+                  description: 'No Content',
+                },
+              },
+            },
+          },
+        },
+      },
+      source: 'swagger.json',
+    });
+    serverGeneratedModule = await transpileGeneratedSource(
+      serverGeneratedSource
     );
   });
 
@@ -884,6 +921,7 @@ describe('operation definition generation', () => {
         '  createCustomJsonSerializer,',
         '  createFetchSender,',
         '  modestaProjectResponse,',
+        '  type ModestaPrepareRequestOptions,',
         "} from './generated.ts';",
         '',
         'const sender: AccessorSenderInterface = {',
@@ -936,8 +974,14 @@ describe('operation definition generation', () => {
         '',
         'const fetchSender = createFetchSender();',
         "const fetchSenderWithOptions = createFetchSender({ baseUrl: 'https://example.com/' });",
+        "const fetchSenderWithOrigin = createFetchSender({ baseUrlSource: 'origin' });",
+        "const fetchSenderWithSwagger = createFetchSender({ baseUrlSource: 'swagger' });",
+        "const prepareRequestOptions: ModestaPrepareRequestOptions = { baseUrlSource: 'auto' };",
+        'prepareRequestOptions;',
         'create_DeleteItem_accessor(fetchSender);',
         'create_DeleteItem_accessor(fetchSenderWithOptions);',
+        'create_DeleteItem_accessor(fetchSenderWithOrigin);',
+        'create_DeleteItem_accessor(fetchSenderWithSwagger);',
         '// @ts-expect-error accessor factories no longer accept interface context arguments',
         "create_DeleteItem_accessor(fetchSender, 'trace-42');",
         '',
@@ -1057,6 +1101,29 @@ describe('operation definition generation', () => {
       headers: undefined,
       signal: undefined,
     });
+    expect(
+      generatedModule.modestaPrepareRequest(request, undefined, {
+        baseUrl: 'https://api.example.com/foobar_svc',
+      }).url
+    ).toEqual(new URL('https://api.example.com/foobar_svc/body'));
+    expect(
+      generatedModule.modestaPrepareRequest(request, undefined, {
+        baseUrl: 'https://api.example.com/foobar_svc/',
+      }).url
+    ).toEqual(new URL('https://api.example.com/foobar_svc/body'));
+    expect(() =>
+      generatedModule.modestaPrepareRequest(request, undefined, {
+        baseUrl: 'https://api.example.com',
+        baseUrlSource: 'origin',
+      })
+    ).toThrow('baseUrl and baseUrlSource cannot be specified together.');
+    expect(() =>
+      generatedModule.modestaPrepareRequest(request, undefined, {
+        baseUrlSource: 'swagger',
+      })
+    ).toThrow(
+      'Swagger base URL is not available. Choose baseUrlSource: "origin" or pass baseUrl explicitly.'
+    );
   });
 
   it('provides public helpers for custom sender response projection', () => {
@@ -1502,6 +1569,136 @@ describe('operation definition generation', () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(1);
     expect(json).toHaveBeenCalledTimes(1);
     expect(text).not.toHaveBeenCalled();
+  });
+
+  it('embeds OpenAPI servers[0].url as the generated Swagger base URL', () => {
+    expect(serverGeneratedSource).toContain(
+      "const modestaGeneratedSwaggerBaseUrl: string | undefined = 'https://baz.example.com/foobar_svc';"
+    );
+  });
+
+  it('uses the generated Swagger base URL when baseUrlSource is auto or omitted', async () => {
+    const fetchImplementation = vi.fn(
+      async (input: URL, init?: RequestInit) => {
+        expect(String(input)).toBe(
+          'https://baz.example.com/foobar_svc/api/v2/foobar'
+        );
+        expect(init).toEqual({
+          method: 'GET',
+        });
+
+        return {
+          ok: true,
+          status: 204,
+          statusText: 'No Content',
+          headers: {
+            get: () => null,
+          },
+          text: async () => '',
+        };
+      }
+    );
+    const sender = serverGeneratedModule.createFetchSender({
+      fetch: fetchImplementation,
+    });
+    const accessor = serverGeneratedModule.create_GetFoobar_accessor(sender);
+
+    await expect(accessor.get()).resolves.toBeUndefined();
+
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the generated Swagger base URL when baseUrlSource is swagger', async () => {
+    const fetchImplementation = vi.fn(
+      async (input: URL, _init?: RequestInit) => {
+        expect(String(input)).toBe(
+          'https://baz.example.com/foobar_svc/api/v2/foobar'
+        );
+
+        return {
+          ok: true,
+          status: 204,
+          statusText: 'No Content',
+          headers: {
+            get: () => null,
+          },
+          text: async () => '',
+        };
+      }
+    );
+    const sender = serverGeneratedModule.createFetchSender({
+      baseUrlSource: 'swagger',
+      fetch: fetchImplementation,
+    });
+    const accessor = serverGeneratedModule.create_GetFoobar_accessor(sender);
+
+    await expect(accessor.get()).resolves.toBeUndefined();
+
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses explicit baseUrl before the generated Swagger base URL', async () => {
+    const fetchImplementation = vi.fn(
+      async (input: URL, _init?: RequestInit) => {
+        expect(String(input)).toBe(
+          'https://override.example.com/public/api/v2/foobar'
+        );
+
+        return {
+          ok: true,
+          status: 204,
+          statusText: 'No Content',
+          headers: {
+            get: () => null,
+          },
+          text: async () => '',
+        };
+      }
+    );
+    const sender = serverGeneratedModule.createFetchSender({
+      baseUrl: 'https://override.example.com/public',
+      fetch: fetchImplementation,
+    });
+    const accessor = serverGeneratedModule.create_GetFoobar_accessor(sender);
+
+    await expect(accessor.get()).resolves.toBeUndefined();
+
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the current origin instead of Swagger when baseUrlSource is origin', async () => {
+    const restoreLocation = replaceGlobalProperty('location', {
+      origin: 'https://current.example',
+    });
+    const fetchImplementation = vi.fn(
+      async (input: URL, _init?: RequestInit) => {
+        expect(String(input)).toBe('https://current.example/api/v2/foobar');
+
+        return {
+          ok: true,
+          status: 204,
+          statusText: 'No Content',
+          headers: {
+            get: () => null,
+          },
+          text: async () => '',
+        };
+      }
+    );
+
+    try {
+      const sender = serverGeneratedModule.createFetchSender({
+        baseUrlSource: 'origin',
+        fetch: fetchImplementation,
+      });
+      const accessor = serverGeneratedModule.create_GetFoobar_accessor(sender);
+
+      await expect(accessor.get()).resolves.toBeUndefined();
+    } finally {
+      restoreLocation();
+    }
+
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
   });
 
   it('requires baseUrl when the current origin is unavailable', async () => {

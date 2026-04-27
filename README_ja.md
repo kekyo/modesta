@@ -137,9 +137,7 @@ import {
 } from './generated/userApi';
 
 // Senderを準備
-const sender = createFetchSender({
-  baseUrl: 'https://api.example.com',
-});
+const sender = createFetchSender();
 
 //  :
 //  :
@@ -271,8 +269,7 @@ export default defineConfig({
 
 1. 最初に"Senderオブジェクト"を生成します。これはリモートAPIにアクセスするためのトランスポートとして機能します。
    通常は `createFetchSender()` 関数を使用すれば十分でしょう。この関数は、内部でfetch APIを使用してリモートAPIにアクセスします。
-   ブラウザで `baseUrl` を省略した場合は、現在のページと同じ `globalThis.location.origin` を基準にします。Node.jsなどでは `baseUrl` を明示して下さい。
-2. 各アクセサファクトリ関数にSenderオブジェクトを渡すことで、アクセサインターフェイスのインスタンスを生成できます。
+#2. 各アクセサファクトリ関数にSenderオブジェクトを渡すことで、アクセサインターフェイスのインスタンスを生成できます。
 3. アクセサインターフェイスが、リモートのAPIのTypeScript表現を定義しているので、後はそれらの関数を呼び出すだけでAPIアクセスが実現します。
 
 以下に簡単な例を示します:
@@ -314,6 +311,48 @@ const result = await summaries.get({
 これらはSwaggerファイルに定義されている型をTypeScriptに置き換えた型として定義されているため、タイプセーフです。
 
 また、上記のように `AbortSignal` を追加で渡すことで、API呼び出しのキャンセル要求も実現できます。
+
+### ベースURLの解決
+
+生成されたアクセサは、Swaggerに記載されたパスを「ベースURL」からの相対パスとして扱います。
+通常、Swaggerのパスは `/api/v2/foobar` のように、絶対パスとして記載されます。これを `api/v2/foobar` のように解釈します。
+
+そして、この相対パスを、ベースURLに結合して、エンドポイントURLを確定させます。
+ベースURLは次の順序で決まります:
+
+1. `createFetchSender()` または `modestaPrepareRequest()` （後述）の引数で指定する `baseUrl`
+2. `baseUrlSource: 'origin'`: 常に `globalThis.location.origin`
+3. `baseUrlSource: 'swagger'`: Swaggerの `servers[0].url`
+4. `baseUrlSource: 'auto'` または省略時: `servers[0].url` があればそれを使い、無ければ `globalThis.location.origin`
+
+典型的には、以下のような初期化コードとなります:
+
+```typescript
+// ベースURLを自動とする
+const sender = createFetchSender();
+
+// ベースURLを明示的に指定する
+const sender = createFetchSender({
+  baseUrl: 'https://baz.example.com/',
+});
+
+// ベースURLを常にブラウザのオリジンとする
+const sender = createFetchSender({
+  baseUrlSource: 'origin'
+});
+```
+
+なお、 `baseUrl` と `baseUrlSource` は同時に指定できません。
+
+例えば、Swaggerのパスが `/api/v2/foobar` で、パブリックエンドポイントのベースURLが `https://baz.example.com/foobar_svc` の場合は、次のように指定します:
+
+```typescript
+const sender = createFetchSender({
+  baseUrl: 'https://baz.example.com/foobar_svc',
+});
+```
+
+この場合、リクエストURLは `https://baz.example.com/foobar_svc/api/v2/foobar` になります。
 
 ---
 

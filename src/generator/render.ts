@@ -67,6 +67,17 @@ const anonymizeSourceFileDisplay = (source: string) => {
   }
 };
 
+const renderRuntimeSource = (api: ApiDefinition) => {
+  const defaultSwaggerBaseUrlDeclaration =
+    'const modestaGeneratedSwaggerBaseUrl: string | undefined = undefined;';
+  return runtimeSource
+    .trimEnd()
+    .replace(
+      defaultSwaggerBaseUrlDeclaration,
+      `const modestaGeneratedSwaggerBaseUrl: string | undefined = ${api.swaggerBaseUrl == null ? 'undefined' : renderLiteral(api.swaggerBaseUrl)};`
+    );
+};
+
 export const renderApiDefinition = (
   api: ApiDefinition,
   context: OpenApiContext
@@ -88,7 +99,7 @@ export const renderApiDefinition = (
     push(`// Source file: ${anonymizeSourceFileDisplay(api.source)}`);
   }
   push();
-  push(runtimeSource.trimEnd());
+  push(renderRuntimeSource(api));
   push();
   const renderedSchemaMetadata = schemaMetadata.renderDefinitions();
   if (renderedSchemaMetadata.length > 0) {

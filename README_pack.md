@@ -125,7 +125,6 @@ export function create_GetUser_accessor(
 
 As you can see, the generated proxy file remains self-contained and adds no external runtime dependency.
 Using it, you can easily write API calling code like this:
-In browsers, `baseUrl` can be omitted to use the current `globalThis.location.origin`.
 
 ```typescript
 import {
@@ -134,9 +133,7 @@ import {
 } from './generated/userApi';
 
 // Prepare a Sender
-const sender = createFetchSender({
-  baseUrl: 'https://api.example.com',
-});
+const sender = createFetchSender();
 
 //  :
 //  :

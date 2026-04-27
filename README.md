@@ -139,9 +139,7 @@ import {
 } from './generated/userApi';
 
 // Prepare a Sender
-const sender = createFetchSender({
-  baseUrl: 'https://api.example.com',
-});
+const sender = createFetchSender();
 
 //  :
 //  :
@@ -272,7 +270,7 @@ Import and use those definitions from the generated file.
 
 1. First, create a "Sender object". It works as the transport used to access the remote API.
    In most cases, `createFetchSender()` is enough. Internally, this function uses the fetch API to access the remote API.
-   In browsers, omitting `baseUrl` resolves requests against the current `globalThis.location.origin`. In Node.js and similar environments, pass `baseUrl` explicitly.
+   You can adjust the URL used for actual access by specifying `baseUrl`. For detailed options, please refer to the next section.
 2. Pass the Sender object to each accessor factory function to create an accessor interface instance.
 3. The accessor interface defines a TypeScript representation of the remote API, so API access is completed by calling those functions.
 
@@ -315,6 +313,49 @@ As in `summaries.get({ ... })`, you can pass the parameters that should be sent 
 These parameters are type-safe because they are defined as TypeScript types converted from the Swagger file.
 
 You can also pass an `AbortSignal` as shown above to request cancellation of the API call.
+
+### Base URL Resolution
+
+The generated accessor treats the paths listed in Swagger as relative paths from the "base URL".
+Typically, Swagger paths are listed as absolute paths, such as `/api/v2/foobar`.
+This is interpreted as `api/v2/foobar`.
+
+This relative path is then concatenated with the base URL to determine the endpoint URL.
+The base URL is determined in the following order:
+
+1. `baseUrl` specified as an argument to `createFetchSender()` or `modestaPrepareRequest()` (described later)
+2. `baseUrlSource: ‘origin’`: Always `globalThis.location.origin`
+3. `baseUrlSource: ‘swagger’`: Swagger’s `servers[0].url`
+4. `baseUrlSource: ‘auto’` or when omitted: If `servers[0].url` exists, use that; otherwise, use `globalThis.location.origin`
+
+Typically, the initialization code looks like this:
+
+```typescript
+// Automatically determines the base URL
+const sender = createFetchSender();
+
+// Explicitly specify the base URL
+const sender = createFetchSender({
+  baseUrl: 'https://baz.example.com/',
+});
+
+// Always use the browser's origin as the base URL
+const sender = createFetchSender({
+  baseUrlSource: 'origin'.
+});
+```
+
+Note that `baseUrl` and `baseUrlSource` cannot be specified simultaneously.
+
+For example, if the Swagger path is `/api/v2/foobar` and the base URL of the public endpoint is `https://baz.example.com/foobar_svc`, specify it as follows:
+
+```typescript
+const sender = createFetchSender({
+  baseUrl: ‘https://baz.example.com/foobar_svc’,
+});
+```
+
+In this case, the request URL will be `https://baz.example.com/foobar_svc/api/v2/foobar`.
 
 ---
 

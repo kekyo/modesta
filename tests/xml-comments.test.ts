@@ -18,6 +18,7 @@ import {
   getInterfaceBlock,
   getInterfaceDocumentation,
   getTypeAliasDocumentation,
+  getTypeAliasStatement,
 } from './support/source-assertions';
 
 const xmlCommentsProject: SwaggerFixtureProject = {
@@ -317,8 +318,14 @@ describe('xml comments integration', () => {
     expect(fetchSenderOptionsBlock).toContain(
       'readonly baseUrl?: string | URL | undefined;'
     );
+    expect(fetchSenderOptionsBlock).toContain(
+      'readonly baseUrlSource?: ModestaBaseUrlSource | undefined;'
+    );
     expect(modestaPrepareRequestOptionsBlock).toContain(
       'readonly baseUrl?: string | URL | undefined;'
+    );
+    expect(modestaPrepareRequestOptionsBlock).toContain(
+      'readonly baseUrlSource?: ModestaBaseUrlSource | undefined;'
     );
     expectMemberDocumentation(
       requestDescriptorBlock,
@@ -598,6 +605,18 @@ describe('xml comments integration', () => {
     expect(generatedSource).not.toContain(
       'export type AccessorContextArgument'
     );
+    expect(
+      getTypeAliasDocumentation(generatedSource, 'ModestaBaseUrlSource')
+    ).toBe(
+      [
+        '/**',
+        ' * Source used to resolve generated accessor request URLs when `baseUrl` is omitted.',
+        ' */',
+      ].join('\n')
+    );
+    expect(getTypeAliasStatement(generatedSource, 'ModestaBaseUrlSource')).toBe(
+      "export type ModestaBaseUrlSource = 'auto' | 'origin' | 'swagger';"
+    );
 
     expect(
       getInterfaceDocumentation(generatedSource, 'CreateFetchSenderOptions')
@@ -605,7 +624,12 @@ describe('xml comments integration', () => {
     expectMemberDocumentation(
       fetchSenderOptionsBlock,
       'baseUrl',
-      '/** Base URL used to resolve generated accessor request URLs. Defaults to globalThis.location.origin when available. */'
+      '/** Explicit base URL used to resolve generated accessor request URLs. */'
+    );
+    expectMemberDocumentation(
+      fetchSenderOptionsBlock,
+      'baseUrlSource',
+      '/** Base URL source used when `baseUrl` is omitted. Defaults to `auto`. */'
     );
     expectMemberDocumentation(
       fetchSenderOptionsBlock,
@@ -639,7 +663,12 @@ describe('xml comments integration', () => {
     expectMemberDocumentation(
       modestaPrepareRequestOptionsBlock,
       'baseUrl',
-      '/** Base URL used to resolve generated accessor request URLs. Defaults to globalThis.location.origin when available. */'
+      '/** Explicit base URL used to resolve generated accessor request URLs. */'
+    );
+    expectMemberDocumentation(
+      modestaPrepareRequestOptionsBlock,
+      'baseUrlSource',
+      '/** Base URL source used when `baseUrl` is omitted. Defaults to `auto`. */'
     );
     expectMemberDocumentation(
       modestaPrepareRequestOptionsBlock,
@@ -697,7 +726,7 @@ describe('xml comments integration', () => {
         ' * @param options Options that configure the fetch-based sender.',
         ' * @returns Sender implementation that executes requests via the fetch API.',
         ' * @remarks When `options.fetch` is omitted, `globalThis.fetch` must be available.',
-        ' * When `options.baseUrl` is omitted, `globalThis.location.origin` must be available.',
+        ' * When `options.baseUrl` is omitted, `options.baseUrlSource` selects the generated Swagger server URL, `globalThis.location.origin`, or both with Swagger first.',
         ' * Per-call context values are not accepted by this sender implementation.',
         ' */',
       ].join('\n')

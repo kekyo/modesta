@@ -73,8 +73,50 @@ export const buildApiDefinition = (
     accessorGroups,
     schemaDefinitions,
     source,
+    swaggerBaseUrl: resolveSwaggerBaseUrl(context),
     title,
   };
+};
+
+const resolveSwaggerServerUrlVariables = (
+  context: OpenApiContext,
+  server: JsonRecord,
+  url: string
+) => {
+  const variables = getRecord(server, 'variables') ?? {};
+  let couldResolveAllVariables = true;
+  const resolvedUrl = url.replace(/\{([^{}]+)\}/gu, (placeholder, name) => {
+    const variable = getRecord(variables, name);
+    const defaultValue = getString(variable, 'default');
+    if (defaultValue == null) {
+      couldResolveAllVariables = false;
+      context.warningSink?.(
+        `OpenAPI server URL variable '${name}' does not have a string default value. The server URL was ignored.`
+      );
+      return placeholder;
+    }
+    return defaultValue;
+  });
+
+  return couldResolveAllVariables ? resolvedUrl : undefined;
+};
+
+const resolveSwaggerBaseUrl = (context: OpenApiContext) => {
+  const servers = asArray(context.document.servers);
+  if (servers == null || servers.length === 0) {
+    return undefined;
+  }
+
+  const server = asRecord(servers[0]);
+  const url = getString(server, 'url');
+  if (server == null || url == null || url.length === 0) {
+    context.warningSink?.(
+      'OpenAPI document-level servers[0].url is not a string. The server URL was ignored.'
+    );
+    return undefined;
+  }
+
+  return resolveSwaggerServerUrlVariables(context, server, url);
 };
 
 const collectRawOperations = (

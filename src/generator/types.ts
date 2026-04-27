@@ -89,6 +89,7 @@ export interface ApiDefinition {
   accessorGroups: AccessorGroupDefinition[];
   schemaDefinitions: SchemaDefinition[];
   source: string | undefined;
+  swaggerBaseUrl: string | undefined;
   title: string | undefined;
 }
 
